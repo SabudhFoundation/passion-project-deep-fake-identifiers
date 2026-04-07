@@ -222,7 +222,7 @@ def save_features(dataset_path, output_file):
 # =====================================
 if __name__ == "__main__":
 
-    base_path = "real-vs-fake"
+    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../real-vs-fake"))
     os.makedirs("features", exist_ok=True)
 
     print("\n🔥 Starting strong FFT-only pipeline...\n")
