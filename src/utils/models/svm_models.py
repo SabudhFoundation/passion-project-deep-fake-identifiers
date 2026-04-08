@@ -18,7 +18,7 @@ class SVMClassifier:
                  class_weight=None,
                  use_pca=False,
                  pca_components=100,
-                 rbf_components=4000):
+                 rbf_components=8000):
 
         self.model_type = model_type
 
@@ -55,8 +55,8 @@ class SVMClassifier:
             steps.append(
                 SGDClassifier(
                     loss="hinge",
-                    alpha=1 / C,
-                    max_iter=1000,
+                    alpha = 1e-4,
+                    max_iter=2000,
                     class_weight=class_weight
                 )
             )
