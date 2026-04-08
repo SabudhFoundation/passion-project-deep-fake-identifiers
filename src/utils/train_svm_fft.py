@@ -36,11 +36,15 @@ print(f"Train: {X_train.shape}, Valid: {X_valid.shape}, Test: {X_test.shape}")
 
 
 # =====================================
-# 2. NORMALIZATION (LOG + STANDARD)
+# 🔥 2. NORMALIZATION (FINAL VERSION)
 # =====================================
-print("\n⚙️ Normalizing features (log + standard)...")
+print("\n⚙️ Applying preprocessing (energy + log + standard)...")
 
-norm = FeatureNormalizer(method="standard", use_log=True)
+norm = FeatureNormalizer(
+    method="standard",
+    use_log=True,
+    use_energy_norm=True   # 🔥 BIG BOOST
+)
 
 X_train = norm.fit_transform(X_train)
 X_valid = norm.transform(X_valid)
@@ -48,15 +52,15 @@ X_test  = norm.transform(X_test)
 
 norm.save(os.path.join(FEATURE_DIR, "normalizer.pkl"))
 
-print("✅ Normalization complete")
+print("✅ Preprocessing complete")
 
 
 # =====================================
-# 3. HYPERPARAMETER TUNING (NONLINEAR 🔥)
+# 3. HYPERPARAMETER TUNING
 # =====================================
 print("\n🚀 Starting RBF Approx tuning...\n")
 
-gamma_values = [0.1, 0.01, 0.001]
+gamma_values = [0.02, 0.01, 0.005]   # 🔥 refined search
 
 best_acc = 0
 best_gamma = None
@@ -69,9 +73,9 @@ for i, gamma in enumerate(gamma_values, 1):
     start_time = time.time()
 
     svm = SVMClassifier(
-        model_type="rbf_approx",   # 🔥 KEY CHANGE
+        model_type="rbf_approx",
         gamma=gamma,
-        rbf_components=2000,
+        rbf_components=4000,   # 🔥 more power
         use_pca=True,
         pca_components=100,
         class_weight="balanced"
@@ -97,7 +101,7 @@ print(f"Validation Accuracy = {best_acc:.4f}")
 
 
 # =====================================
-# 5. FINAL TRAINING (MERGED DATA)
+# 5. FINAL TRAINING
 # =====================================
 print("\n🚀 Training final model on FULL data...")
 
@@ -109,7 +113,7 @@ start_time = time.time()
 svm = SVMClassifier(
     model_type="rbf_approx",
     gamma=best_gamma,
-    rbf_components=2000,
+    rbf_components=4000,
     use_pca=True,
     pca_components=100,
     class_weight="balanced"
