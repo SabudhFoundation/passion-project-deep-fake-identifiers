@@ -6,6 +6,7 @@ import numpy as np
 
 from normalizer import FeatureNormalizer
 from models.svm_models import SVMClassifier
+from scipy.stats import skew, kurtosis
 
 
 # =====================================
@@ -38,12 +39,6 @@ def load_stream(path):
     return np.array(features), np.array(labels)
 
 
-def save_stream(X, y, path):
-    with open(path, "wb") as f:
-        for i in range(len(X)):
-            pickle.dump((X[i], y[i]), f)
-
-
 print("📂 Loading features...")
 
 X_train, y_train = load_stream(os.path.join(FEATURE_DIR, "train_features.pkl"))
@@ -51,6 +46,27 @@ X_valid, y_valid = load_stream(os.path.join(FEATURE_DIR, "valid_features.pkl"))
 X_test,  y_test  = load_stream(os.path.join(FEATURE_DIR, "test_features.pkl"))
 
 print(f"Train: {X_train.shape}, Valid: {X_valid.shape}, Test: {X_test.shape}")
+
+
+# =====================================
+# ADD STAT FEATURES
+# =====================================
+def add_stat_features(X):
+    mean = np.mean(X, axis=1, keepdims=True)
+    std = np.std(X, axis=1, keepdims=True)
+    skewness = skew(X, axis=1).reshape(-1, 1)
+    kurt = kurtosis(X, axis=1).reshape(-1, 1)
+
+    return np.hstack([X, mean, std, skewness, kurt])
+
+
+print("\n⚙️ Adding statistical features...")
+
+X_train = add_stat_features(X_train)
+X_valid = add_stat_features(X_valid)
+X_test  = add_stat_features(X_test)
+
+print(f"New feature dim: {X_train.shape[1]}")
 
 
 # =====================================
@@ -92,9 +108,10 @@ print("✅ Normalization complete")
 print("\n🚀 Hyperparameter tuning...\n")
 
 param_grid = [
-    {"gamma": 0.01},
     {"gamma": 0.005},
+    {"gamma": 0.003},
     {"gamma": 0.002},
+    {"gamma": 0.0015},
 ]
 
 best_acc = 0
@@ -109,15 +126,18 @@ for i, params in enumerate(param_grid, 1):
     svm = SVMClassifier(
         model_type="rbf_approx",
         gamma=gamma,
-        rbf_components=1500,
-        use_pca=False,
+        rbf_components=4000,
+
+        # 🔥 KEY CHANGE (PCA ENABLED)
+        use_pca=True,
+        pca_components=120,
+
         class_weight="balanced",
         random_state=42
     )
 
     svm.train(X_train, y_train)
 
-    # 🔥 KEY STEP: tune threshold on validation set
     threshold, tuned_acc = svm.tune_threshold(X_valid, y_valid)
 
     print(f"Threshold tuned accuracy: {tuned_acc:.4f}")
@@ -148,15 +168,15 @@ y_full = np.hstack((y_train, y_valid))
 svm = SVMClassifier(
     model_type="rbf_approx",
     gamma=best_config["gamma"],
-    rbf_components=1500,
-    use_pca=False,
+    rbf_components=4000,
+    use_pca=True,
+    pca_components=120,
     class_weight="balanced",
     random_state=42
 )
 
 svm.train(X_full, y_full)
 
-# 🔥 IMPORTANT: reuse best threshold
 svm.best_threshold = best_threshold
 
 

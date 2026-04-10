@@ -11,30 +11,24 @@ from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 
 
 class SVMClassifier:
+    """
+    SVM Classifier with:
+    - Optional PCA (recommended for high-dim noisy features)
+    - RBF approximation (non-linear modeling)
+    - Threshold tuning (improves final accuracy)
+    """
+
     def __init__(
         self,
-        model_type="sgd",
+        model_type="rbf_approx",
         C=1.0,
         gamma=0.01,
         class_weight="balanced",
-        use_pca=False,
-        pca_components=80,
+        use_pca=True,          # 🔥 ENABLED by default
+        pca_components=120,    # 🔥 tuned for your feature size
         rbf_components=4000,
         random_state=42
     ):
-        """
-        Enhanced SVM Classifier
-
-        New:
-        - Threshold tuning (boosts accuracy significantly)
-        - Better evaluation (uses decision scores)
-
-        model_type:
-        - 'sgd'
-        - 'linear'
-        - 'rbf_approx'
-        """
-
         self.model_type = model_type
         self.C = C
         self.gamma = gamma
@@ -44,43 +38,49 @@ class SVMClassifier:
         self.rbf_components = rbf_components
         self.random_state = random_state
 
-        self.best_threshold = 0.0  # 🔥 NEW
+        self.best_threshold = 0.0
 
-        self.model = self.build_pipeline()
+        self.model = self._build_pipeline()
 
     # =====================================
-    # BUILDERS
+    # PIPELINE BUILDING
     # =====================================
-    def build_pca(self):
-        return PCA(
-            n_components=self.pca_components,
-            svd_solver="randomized",
-            random_state=self.random_state
-        )
+    def _build_pipeline(self):
+        steps = []
 
-    def build_rbf(self):
-        return RBFSampler(
-            gamma=self.gamma,
-            n_components=self.rbf_components,
-            random_state=self.random_state
-        )
+        # ---- PCA (noise reduction) ----
+        if self.use_pca:
+            steps.append((
+                "pca",
+                PCA(
+                    n_components=self.pca_components,
+                    svd_solver="randomized",
+                    random_state=self.random_state
+                )
+            ))
 
-    def build_classifier(self):
+        # ---- RBF mapping (non-linear features) ----
+        if self.model_type == "rbf_approx":
+            steps.append((
+                "rbf",
+                RBFSampler(
+                    gamma=self.gamma,
+                    n_components=self.rbf_components,
+                    random_state=self.random_state
+                )
+            ))
 
-        if self.model_type == "sgd":
-            return SGDClassifier(
-                loss="hinge",
-                alpha=1e-4,
-                max_iter=2000,
-                tol=1e-3,
-                class_weight=self.class_weight,
-                early_stopping=True,
-                validation_fraction=0.1,
-                n_jobs=-1,
-                random_state=self.random_state
-            )
+        # ---- Classifier ----
+        steps.append(("clf", self._build_classifier()))
 
-        elif self.model_type == "linear":
+        return Pipeline(steps)
+
+    # =====================================
+    # CLASSIFIER
+    # =====================================
+    def _build_classifier(self):
+
+        if self.model_type == "linear":
             return LinearSVC(
                 C=self.C,
                 class_weight=self.class_weight,
@@ -88,14 +88,14 @@ class SVMClassifier:
                 tol=1e-3
             )
 
-        elif self.model_type == "rbf_approx":
+        elif self.model_type in ["sgd", "rbf_approx"]:
             return SGDClassifier(
                 loss="hinge",
                 alpha=3e-5,
                 max_iter=4000,
                 tol=1e-4,
-                class_weight=self.class_weight,
                 learning_rate="optimal",
+                class_weight=self.class_weight,
                 early_stopping=False,
                 n_jobs=-1,
                 random_state=self.random_state
@@ -103,19 +103,6 @@ class SVMClassifier:
 
         else:
             raise ValueError("❌ Invalid model_type")
-
-    def build_pipeline(self):
-        steps = []
-
-        if self.use_pca:
-            steps.append(("pca", self.build_pca()))
-
-        if self.model_type == "rbf_approx":
-            steps.append(("rbf", self.build_rbf()))
-
-        steps.append(("clf", self.build_classifier()))
-
-        return Pipeline(steps)
 
     # =====================================
     # TRAIN
@@ -129,7 +116,7 @@ class SVMClassifier:
         print(f"✅ Done in {time.time() - start:.2f} sec")
 
     # =====================================
-    # DECISION SCORES
+    # SCORES
     # =====================================
     def decision_scores(self, X):
         return self.model.decision_function(X)
@@ -139,7 +126,7 @@ class SVMClassifier:
     # =====================================
     def tune_threshold(self, X, y):
         """
-        Find best threshold using validation data
+        Find optimal threshold on validation set
         """
         scores = self.decision_scores(X)
 
@@ -149,8 +136,8 @@ class SVMClassifier:
         best_t = 0
 
         for t in thresholds:
-            y_pred = (scores > t).astype(int)
-            acc = accuracy_score(y, y_pred)
+            preds = (scores > t).astype(int)
+            acc = accuracy_score(y, preds)
 
             if acc > best_acc:
                 best_acc = acc
@@ -164,7 +151,7 @@ class SVMClassifier:
         return best_t, best_acc
 
     # =====================================
-    # PREDICT (WITH THRESHOLD)
+    # PREDICT
     # =====================================
     def predict(self, X):
         scores = self.decision_scores(X)
@@ -173,11 +160,8 @@ class SVMClassifier:
     # =====================================
     # EVALUATE
     # =====================================
-    def evaluate(self, X, y, use_threshold=True):
-        if use_threshold:
-            y_pred = self.predict(X)
-        else:
-            y_pred = self.model.predict(X)
+    def evaluate(self, X, y):
+        y_pred = self.predict(X)
 
         acc = accuracy_score(y, y_pred)
 
