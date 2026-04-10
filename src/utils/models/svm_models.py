@@ -19,21 +19,20 @@ class SVMClassifier:
         class_weight="balanced",
         use_pca=False,
         pca_components=80,
-        rbf_components=1200,
+        rbf_components=4000,
         random_state=42
     ):
         """
-        Modular SVM Classifier
+        Enhanced SVM Classifier
 
-        Features:
-        - Separate builders for PCA, RBF, Classifier
-        - Flexible pipeline creation
-        - Easy experimentation
+        New:
+        - Threshold tuning (boosts accuracy significantly)
+        - Better evaluation (uses decision scores)
 
         model_type:
-        - 'sgd'        → fast, scalable
-        - 'linear'     → strong baseline
-        - 'rbf_approx'→ non-linear (best accuracy)
+        - 'sgd'
+        - 'linear'
+        - 'rbf_approx'
         """
 
         self.model_type = model_type
@@ -45,44 +44,29 @@ class SVMClassifier:
         self.rbf_components = rbf_components
         self.random_state = random_state
 
-        # Final pipeline
+        self.best_threshold = 0.0  # 🔥 NEW
+
         self.model = self.build_pipeline()
 
     # =====================================
-    # PCA BUILDER
+    # BUILDERS
     # =====================================
     def build_pca(self):
-        """
-        Optional dimensionality reduction
-        """
         return PCA(
             n_components=self.pca_components,
             svd_solver="randomized",
             random_state=self.random_state
         )
 
-    # =====================================
-    # RBF FEATURE MAPPER
-    # =====================================
     def build_rbf(self):
-        """
-        Approximate RBF kernel using random features
-        """
         return RBFSampler(
             gamma=self.gamma,
             n_components=self.rbf_components,
             random_state=self.random_state
         )
 
-    # =====================================
-    # CLASSIFIER BUILDER
-    # =====================================
     def build_classifier(self):
-        """
-        Choose classifier based on model_type
-        """
 
-        # 🔥 FAST + LARGE DATA
         if self.model_type == "sgd":
             return SGDClassifier(
                 loss="hinge",
@@ -96,7 +80,6 @@ class SVMClassifier:
                 random_state=self.random_state
             )
 
-        # ⚡ STRONG LINEAR MODEL
         elif self.model_type == "linear":
             return LinearSVC(
                 C=self.C,
@@ -105,7 +88,6 @@ class SVMClassifier:
                 tol=1e-3
             )
 
-        # 🔥 NON-LINEAR (BEST FOR YOUR PROJECT)
         elif self.model_type == "rbf_approx":
             return SGDClassifier(
                 loss="hinge",
@@ -120,26 +102,17 @@ class SVMClassifier:
             )
 
         else:
-            raise ValueError("❌ Use: 'sgd', 'linear', or 'rbf_approx'")
+            raise ValueError("❌ Invalid model_type")
 
-    # =====================================
-    # PIPELINE BUILDER
-    # =====================================
     def build_pipeline(self):
-        """
-        Combine all components into pipeline
-        """
         steps = []
 
-        # ---- PCA ----
         if self.use_pca:
             steps.append(("pca", self.build_pca()))
 
-        # ---- RBF (only for non-linear) ----
         if self.model_type == "rbf_approx":
             steps.append(("rbf", self.build_rbf()))
 
-        # ---- Classifier ----
         steps.append(("clf", self.build_classifier()))
 
         return Pipeline(steps)
@@ -156,26 +129,55 @@ class SVMClassifier:
         print(f"✅ Done in {time.time() - start:.2f} sec")
 
     # =====================================
-    # PREDICT
-    # =====================================
-    def predict(self, X):
-        return self.model.predict(X)
-
-    # =====================================
     # DECISION SCORES
     # =====================================
     def decision_scores(self, X):
+        return self.model.decision_function(X)
+
+    # =====================================
+    # THRESHOLD TUNING
+    # =====================================
+    def tune_threshold(self, X, y):
         """
-        Used for ROC-AUC
+        Find best threshold using validation data
         """
-        clf = self.model.named_steps["clf"]
-        return clf.decision_function(X)
+        scores = self.decision_scores(X)
+
+        thresholds = np.linspace(scores.min(), scores.max(), 200)
+
+        best_acc = 0
+        best_t = 0
+
+        for t in thresholds:
+            y_pred = (scores > t).astype(int)
+            acc = accuracy_score(y, y_pred)
+
+            if acc > best_acc:
+                best_acc = acc
+                best_t = t
+
+        self.best_threshold = best_t
+
+        print(f"🔥 Best Threshold: {best_t:.4f}")
+        print(f"🔥 Tuned Accuracy: {best_acc:.4f}")
+
+        return best_t, best_acc
+
+    # =====================================
+    # PREDICT (WITH THRESHOLD)
+    # =====================================
+    def predict(self, X):
+        scores = self.decision_scores(X)
+        return (scores > self.best_threshold).astype(int)
 
     # =====================================
     # EVALUATE
     # =====================================
-    def evaluate(self, X, y):
-        y_pred = self.predict(X)
+    def evaluate(self, X, y, use_threshold=True):
+        if use_threshold:
+            y_pred = self.predict(X)
+        else:
+            y_pred = self.model.predict(X)
 
         acc = accuracy_score(y, y_pred)
 
@@ -183,12 +185,11 @@ class SVMClassifier:
         print("\n📊 Classification Report:")
         print(classification_report(y, y_pred))
 
-        # ---- ROC-AUC ----
         try:
             scores = self.decision_scores(X)
             auc = roc_auc_score(y, scores)
             print(f"\n📈 ROC-AUC: {auc:.4f}")
-        except Exception:
+        except:
             print("⚠️ ROC-AUC not available")
 
         return acc
@@ -198,8 +199,13 @@ class SVMClassifier:
     # =====================================
     def save(self, path):
         with open(path, "wb") as f:
-            pickle.dump(self.model, f)
+            pickle.dump({
+                "model": self.model,
+                "threshold": self.best_threshold
+            }, f)
 
     def load(self, path):
         with open(path, "rb") as f:
-            self.model = pickle.load(f)
+            data = pickle.load(f)
+            self.model = data["model"]
+            self.best_threshold = data.get("threshold", 0.0)

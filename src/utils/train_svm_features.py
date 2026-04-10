@@ -6,7 +6,6 @@ import numpy as np
 
 from normalizer import FeatureNormalizer
 from models.svm_models import SVMClassifier
-from sklearn.metrics import roc_auc_score
 
 
 # =====================================
@@ -22,13 +21,9 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 
 
 # =====================================
-# LOAD FEATURES (STREAMING)
+# LOAD FEATURES
 # =====================================
 def load_stream(path):
-    """
-    Load features stored as sequential pickle dumps
-    (memory-efficient for large datasets)
-    """
     features, labels = [], []
 
     with open(path, "rb") as f:
@@ -43,13 +38,7 @@ def load_stream(path):
     return np.array(features), np.array(labels)
 
 
-# =====================================
-# SAVE FEATURES (STREAMING)
-# =====================================
 def save_stream(X, y, path):
-    """
-    Save features sequentially (avoids large memory spikes)
-    """
     with open(path, "wb") as f:
         for i in range(len(X)):
             pickle.dump((X[i], y[i]), f)
@@ -67,7 +56,6 @@ print(f"Train: {X_train.shape}, Valid: {X_valid.shape}, Test: {X_test.shape}")
 # =====================================
 # FEATURE CONFIG
 # =====================================
-# Defines how feature vector is split
 LBP_DIM = 112
 GLCM_DIM = 40
 
@@ -80,36 +68,19 @@ print("\n⚙️ Applying normalization...")
 norm = FeatureNormalizer(
     lbp_dim=LBP_DIM,
     glcm_dim=GLCM_DIM,
-
-    # FFT preprocessing
     use_log_fft=True,
     use_energy_norm=True,
-
-    # 🔥 Feature balancing (VERY IMPORTANT)
-    fft_weight=1.0,      # reduce noise influence
-    glcm_weight=1.0,     # emphasize texture
-    lbp_scale=True       # normalize histogram safely
+    fft_weight=1.0,
+    glcm_weight=1.0,
+    lbp_scale=True
 )
 
-# Fit ONLY on training data
 norm.fit(X_train)
 
-# Apply to all splits
 X_train = norm.transform(X_train)
 X_valid = norm.transform(X_valid)
 X_test  = norm.transform(X_test)
 
-
-# =====================================
-# SAVE NORMALIZED FEATURES
-# =====================================
-save_stream(X_train, y_train, os.path.join(FEATURE_DIR, "train_norm.pkl"))
-save_stream(X_valid, y_valid, os.path.join(FEATURE_DIR, "valid_norm.pkl"))
-save_stream(X_test,  y_test,  os.path.join(FEATURE_DIR, "test_norm.pkl"))
-
-print("💾 Normalized features saved")
-
-# Save normalizer for inference
 norm.save(os.path.join(MODEL_DIR, "normalizer_features.pkl"))
 
 print("✅ Normalization complete")
@@ -128,14 +99,12 @@ param_grid = [
 
 best_acc = 0
 best_config = None
-results = []
+best_threshold = 0
 
 for i, params in enumerate(param_grid, 1):
 
     gamma = params["gamma"]
     print(f"\n🔍 [{i}/{len(param_grid)}] gamma={gamma}")
-
-    start = time.time()
 
     svm = SVMClassifier(
         model_type="rbf_approx",
@@ -148,44 +117,28 @@ for i, params in enumerate(param_grid, 1):
 
     svm.train(X_train, y_train)
 
-    acc = svm.evaluate(X_valid, y_valid)
+    # 🔥 KEY STEP: tune threshold on validation set
+    threshold, tuned_acc = svm.tune_threshold(X_valid, y_valid)
 
-    # ROC-AUC (important for deepfake detection)
-    try:
-        scores = svm.decision_scores(X_valid)
-        auc = roc_auc_score(y_valid, scores)
-        print(f"📈 ROC-AUC: {auc:.4f}")
-    except:
-        auc = None
+    print(f"Threshold tuned accuracy: {tuned_acc:.4f}")
 
-    duration = time.time() - start
-
-    results.append({
-        "gamma": gamma,
-        "accuracy": acc,
-        "auc": auc,
-        "time": duration
-    })
-
-    if acc > best_acc:
-        best_acc = acc
+    if tuned_acc > best_acc:
+        best_acc = tuned_acc
         best_config = params
+        best_threshold = threshold
 
 
 # =====================================
-# SAVE TUNING RESULTS
+# BEST PARAMS
 # =====================================
-with open(os.path.join(MODEL_DIR, "tuning_results.json"), "w") as f:
-    json.dump(results, f, indent=4)
-
-
 print("\n🏆 Best Parameters:")
 print(best_config)
 print(f"Validation Accuracy = {best_acc:.4f}")
+print(f"Best Threshold = {best_threshold:.4f}")
 
 
 # =====================================
-# FINAL TRAINING (TRAIN + VALID)
+# FINAL TRAINING
 # =====================================
 print("\n🚀 Training final model...")
 
@@ -203,6 +156,9 @@ svm = SVMClassifier(
 
 svm.train(X_full, y_full)
 
+# 🔥 IMPORTANT: reuse best threshold
+svm.best_threshold = best_threshold
+
 
 # =====================================
 # FINAL TEST
@@ -213,12 +169,15 @@ svm.evaluate(X_test, y_test)
 
 
 # =====================================
-# SAVE MODEL + METADATA
+# SAVE MODEL
 # =====================================
 svm.save(os.path.join(MODEL_DIR, "svm_features.pkl"))
 
 with open(os.path.join(MODEL_DIR, "best_params_features.json"), "w") as f:
-    json.dump(best_config, f, indent=4)
+    json.dump({
+        "gamma": best_config["gamma"],
+        "threshold": float(best_threshold)
+    }, f, indent=4)
 
 with open(os.path.join(MODEL_DIR, "label_map.json"), "w") as f:
     json.dump({0: "real", 1: "fake"}, f)
