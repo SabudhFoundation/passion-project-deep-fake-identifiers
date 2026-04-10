@@ -3,125 +3,165 @@ import pickle
 
 
 class FeatureNormalizer:
-    def __init__(self, method="standard", use_log=True, use_energy_norm=False):
+    def __init__(
+        self,
+        lbp_dim,
+        glcm_dim,
+        use_log_fft=True,
+        use_energy_norm=True,
+        fft_weight=1.0,
+        glcm_weight=1.0,
+        lbp_scale=True
+    ):
         """
-        Initializes the normalizer.
+        Modular Feature Normalizer
+
+        Features:
+        - Separate normalization for LBP, GLCM, FFT
+        - Can use individually or combined
+        - Designed for experimentation and debugging
 
         Parameters:
-        - method:
-            'minmax'   → scales features to [0, 1]
-            'standard' → zero mean, unit variance (most common)
-            'robust'   → uses median & IQR (good for outliers)
-
-        - use_log:
-            Apply log transform (important for FFT since values are skewed)
-
-        - use_energy_norm:
-            Normalize each sample independently (helps FFT consistency)
+        - lbp_dim: number of LBP features
+        - glcm_dim: number of GLCM features
+        - fft_weight: controls FFT importance
+        - glcm_weight: controls GLCM importance
         """
-        self.method = method
-        self.use_log = use_log
+
+        self.lbp_dim = lbp_dim
+        self.glcm_dim = glcm_dim
+
+        self.use_log_fft = use_log_fft
         self.use_energy_norm = use_energy_norm
 
-        # Stores computed statistics (mean, std, etc.)
+        self.fft_weight = fft_weight
+        self.glcm_weight = glcm_weight
+        self.lbp_scale = lbp_scale
+
+        # stores mean/std for each feature
         self.params = {}
 
     # =====================================
-    # PREPROCESS (FFT-SAFE PIPELINE)
+    # SPLIT FEATURES
     # =====================================
-    def _preprocess(self, X):
+    def split_features(self, X):
         """
-        Preprocessing before normalization.
-
-        Steps:
-        1. Energy normalization (per sample)
-        2. Safe log transform
+        Split combined feature vector into:
+        - LBP
+        - GLCM
+        - FFT
         """
+        lbp = X[:, :self.lbp_dim]
+        glcm = X[:, self.lbp_dim:self.lbp_dim + self.glcm_dim]
+        fft = X[:, self.lbp_dim + self.glcm_dim:]
+        return lbp, glcm, fft
 
-        # ✅ Normalize each sample by its total energy
-        # Helps remove brightness/intensity differences
+    # =====================================
+    # LBP NORMALIZATION
+    # =====================================
+    def normalize_lbp_fit(self, lbp):
+        """
+        Compute mean and std for LBP
+        """
+        if self.lbp_scale:
+            self.params["lbp_mean"] = np.mean(lbp, axis=0)
+            self.params["lbp_std"] = np.std(lbp, axis=0) + 1e-8
+
+    def normalize_lbp_transform(self, lbp):
+        """
+        Apply normalization to LBP
+        """
+        if self.lbp_scale:
+            lbp = (lbp - self.params["lbp_mean"]) / self.params["lbp_std"]
+        return lbp
+
+    # =====================================
+    # GLCM NORMALIZATION
+    # =====================================
+    def normalize_glcm_fit(self, glcm):
+        """
+        Compute mean and std for GLCM
+        """
+        self.params["glcm_mean"] = np.mean(glcm, axis=0)
+        self.params["glcm_std"] = np.std(glcm, axis=0) + 1e-8
+
+    def normalize_glcm_transform(self, glcm):
+        """
+        Normalize and apply weight scaling
+        """
+        glcm = (glcm - self.params["glcm_mean"]) / self.params["glcm_std"]
+        return glcm * self.glcm_weight
+
+    # =====================================
+    # FFT PREPROCESSING
+    # =====================================
+    def process_fft(self, fft):
+        """
+        Apply preprocessing on FFT:
+        1. Energy normalization
+        2. Log scaling (reduces extreme values)
+        """
         if self.use_energy_norm:
-            X = X / (np.sum(np.abs(X), axis=1, keepdims=True) + 1e-8)
+            fft = fft / (np.sum(np.abs(fft), axis=1, keepdims=True) + 1e-8)
 
-        # ✅ Log transform (stabilizes large FFT values)
-        if self.use_log:
-            X = np.abs(X)  # FFT magnitude should be positive
+        if self.use_log_fft:
+            fft = np.log1p(np.abs(fft))
 
-            # Replace NaN/Inf values with safe numbers
-            X = np.nan_to_num(X, nan=0.0, posinf=1e6, neginf=0.0)
-
-            # log(1 + x) prevents log(0) issue
-            X = np.log1p(X)
-
-        return X
+        return fft
 
     # =====================================
-    # FIT
+    # FFT NORMALIZATION
+    # =====================================
+    def normalize_fft_fit(self, fft):
+        """
+        Compute mean/std AFTER preprocessing
+        """
+        fft = self.process_fft(fft)
+        self.params["fft_mean"] = np.mean(fft, axis=0)
+        self.params["fft_std"] = np.std(fft, axis=0) + 1e-8
+
+    def normalize_fft_transform(self, fft):
+        """
+        Normalize FFT + apply weight scaling
+        """
+        fft = self.process_fft(fft)
+        fft = (fft - self.params["fft_mean"]) / self.params["fft_std"]
+        return fft * self.fft_weight
+
+    # =====================================
+    # FIT ALL FEATURES
     # =====================================
     def fit(self, X):
         """
-        Learns normalization parameters from data.
-
-        Stores:
-        - min/max for minmax scaling
-        - mean/std for standard scaling
-        - median/IQR for robust scaling
+        Fit all feature normalizers together
         """
-        X = self._preprocess(X)
+        lbp, glcm, fft = self.split_features(X)
 
-        if self.method == "minmax":
-            # Store feature-wise min and max
-            self.params["min"] = np.min(X, axis=0)
-            self.params["max"] = np.max(X, axis=0)
-
-        elif self.method == "standard":
-            # Store mean and std deviation
-            self.params["mean"] = np.mean(X, axis=0)
-            self.params["std"] = np.std(X, axis=0) + 1e-8  # avoid division by zero
-
-        elif self.method == "robust":
-            # Store median and interquartile range (IQR)
-            self.params["median"] = np.median(X, axis=0)
-            q1 = np.percentile(X, 25, axis=0)
-            q3 = np.percentile(X, 75, axis=0)
-            self.params["iqr"] = (q3 - q1) + 1e-8
-
-        else:
-            raise ValueError("Invalid method")
+        self.normalize_lbp_fit(lbp)
+        self.normalize_glcm_fit(glcm)
+        self.normalize_fft_fit(fft)
 
     # =====================================
-    # TRANSFORM
+    # TRANSFORM ALL FEATURES
     # =====================================
     def transform(self, X):
         """
-        Applies normalization using learned parameters.
+        Apply normalization to all features
         """
-        X = self._preprocess(X)
+        lbp, glcm, fft = self.split_features(X)
 
-        if self.method == "minmax":
-            # Scale to [0, 1]
-            return (X - self.params["min"]) / (
-                self.params["max"] - self.params["min"] + 1e-8
-            )
+        lbp = self.normalize_lbp_transform(lbp)
+        glcm = self.normalize_glcm_transform(glcm)
+        fft = self.normalize_fft_transform(fft)
 
-        elif self.method == "standard":
-            # Standardization (zero mean, unit variance)
-            return (X - self.params["mean"]) / self.params["std"]
-
-        elif self.method == "robust":
-            # Robust scaling (handles outliers better)
-            return (X - self.params["median"]) / self.params["iqr"]
-
-        else:
-            raise ValueError("Invalid method")
+        return np.concatenate([lbp, glcm, fft], axis=1)
 
     # =====================================
     # FIT + TRANSFORM
     # =====================================
     def fit_transform(self, X):
         """
-        Convenience function:
-        First learns parameters, then applies transformation.
+        Convenience function
         """
         self.fit(X)
         return self.transform(X)
@@ -129,32 +169,16 @@ class FeatureNormalizer:
     # =====================================
     # SAVE / LOAD
     # =====================================
-    def save(self, filepath):
+    def save(self, path):
         """
-        Saves normalization settings to file.
-        Useful for applying same normalization during inference.
+        Save full normalizer state
         """
-        with open(filepath, "wb") as f:
-            pickle.dump({
-                "method": self.method,
-                "use_log": self.use_log,
-                "use_energy_norm": self.use_energy_norm,
-                "params": self.params
-            }, f)
+        with open(path, "wb") as f:
+            pickle.dump(self.__dict__, f)
 
-        print(f"💾 Normalizer saved → {filepath}")
-
-    def load(self, filepath):
+    def load(self, path):
         """
-        Loads normalization settings from file.
-        Ensures consistency between training and testing.
+        Load normalizer state
         """
-        with open(filepath, "rb") as f:
-            data = pickle.load(f)
-
-            self.method = data["method"]
-            self.use_log = data["use_log"]
-            self.use_energy_norm = data.get("use_energy_norm", False)
-            self.params = data["params"]
-
-        print(f"📂 Normalizer loaded ← {filepath}")
+        with open(path, "rb") as f:
+            self.__dict__.update(pickle.load(f))

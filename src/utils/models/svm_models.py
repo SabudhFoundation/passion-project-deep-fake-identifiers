@@ -1,192 +1,205 @@
 import pickle
 import time
+import numpy as np
 
-from sklearn.svm import SVC, LinearSVC
+from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from sklearn.kernel_approximation import RBFSampler
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 
 
 class SVMClassifier:
-    def __init__(self,
-                 model_type="linear",
-                 C=1.0,
-                 gamma=0.01,
-                 probability=False,
-                 class_weight=None,
-                 use_pca=False,
-                 pca_components=100,
-                 rbf_components=8000):
+    def __init__(
+        self,
+        model_type="sgd",
+        C=1.0,
+        gamma=0.01,
+        class_weight="balanced",
+        use_pca=False,
+        pca_components=80,
+        rbf_components=1200,
+        random_state=42
+    ):
         """
-        Initializes the classifier.
+        Modular SVM Classifier
 
-        Parameters:
-        - model_type:
-            'linear'      → Linear SVM (fast, scalable)
-            'rbf'         → Kernel SVM (powerful but slow)
-            'sgd'         → Linear SVM using SGD (very fast for large data)
-            'rbf_approx'  → RBF kernel approximation using random features
+        Features:
+        - Separate builders for PCA, RBF, Classifier
+        - Flexible pipeline creation
+        - Easy experimentation
 
-        - C:
-            Regularization parameter (higher = less regularization)
-
-        - gamma:
-            Kernel width (used in RBF)
-
-        - probability:
-            Enable probability outputs (only for SVC, slower)
-
-        - class_weight:
-            Handles imbalance (e.g., "balanced")
-
-        - use_pca:
-            Whether to reduce feature dimensionality
-
-        - pca_components:
-            Number of principal components
-
-        - rbf_components:
-            Number of random Fourier features (for RBF approximation)
+        model_type:
+        - 'sgd'        → fast, scalable
+        - 'linear'     → strong baseline
+        - 'rbf_approx'→ non-linear (best accuracy)
         """
 
         self.model_type = model_type
+        self.C = C
+        self.gamma = gamma
+        self.class_weight = class_weight
+        self.use_pca = use_pca
+        self.pca_components = pca_components
+        self.rbf_components = rbf_components
+        self.random_state = random_state
 
-        # Pipeline steps (PCA → Model)
-        steps = []
+        # Final pipeline
+        self.model = self.build_pipeline()
 
-        # =====================================
-        # OPTIONAL PCA (Dimensionality Reduction)
-        # =====================================
-        if use_pca:
-            # Reduces feature size → faster training + less noise
-            steps.append(PCA(n_components=pca_components))
+    # =====================================
+    # PCA BUILDER
+    # =====================================
+    def build_pca(self):
+        """
+        Optional dimensionality reduction
+        """
+        return PCA(
+            n_components=self.pca_components,
+            svd_solver="randomized",
+            random_state=self.random_state
+        )
 
-        # =====================================
-        # MODEL SELECTION
-        # =====================================
+    # =====================================
+    # RBF FEATURE MAPPER
+    # =====================================
+    def build_rbf(self):
+        """
+        Approximate RBF kernel using random features
+        """
+        return RBFSampler(
+            gamma=self.gamma,
+            n_components=self.rbf_components,
+            random_state=self.random_state
+        )
 
-        # 🔹 Exact RBF Kernel SVM (slow but accurate)
-        if model_type == "rbf":
-            steps.append(
-                SVC(
-                    kernel="rbf",
-                    C=C,
-                    gamma=gamma,
-                    probability=probability,
-                    class_weight=class_weight,
-                    cache_size=1000   # larger cache for speed
-                )
+    # =====================================
+    # CLASSIFIER BUILDER
+    # =====================================
+    def build_classifier(self):
+        """
+        Choose classifier based on model_type
+        """
+
+        # 🔥 FAST + LARGE DATA
+        if self.model_type == "sgd":
+            return SGDClassifier(
+                loss="hinge",
+                alpha=1e-4,
+                max_iter=2000,
+                tol=1e-3,
+                class_weight=self.class_weight,
+                early_stopping=True,
+                validation_fraction=0.1,
+                n_jobs=-1,
+                random_state=self.random_state
             )
 
-        # 🔹 Linear SVM (fast and strong baseline)
-        elif model_type == "linear":
-            steps.append(
-                LinearSVC(
-                    C=C,
-                    class_weight=class_weight,
-                    max_iter=2000,
-                    tol=1e-3
-                )
+        # ⚡ STRONG LINEAR MODEL
+        elif self.model_type == "linear":
+            return LinearSVC(
+                C=self.C,
+                class_weight=self.class_weight,
+                max_iter=3000,
+                tol=1e-3
             )
 
-        # 🔹 SGD-based linear classifier (scales to huge datasets)
-        elif model_type == "sgd":
-            steps.append(
-                SGDClassifier(
-                    loss="hinge",       # same as linear SVM
-                    alpha=1e-4,         # regularization strength
-                    max_iter=2000,
-                    class_weight=class_weight
-                )
-            )
-
-        # 🔹 RBF Approximation (FAST + NON-LINEAR 🔥)
-        elif model_type == "rbf_approx":
-            # Step 1: Map data to higher dimension using random Fourier features
-            steps.append(RBFSampler(gamma=gamma, n_components=rbf_components))
-
-            # Step 2: Train linear classifier on transformed features
-            steps.append(
-                SGDClassifier(
-                    loss="hinge",
-                    max_iter=1000,
-                    class_weight=class_weight
-                )
+        # 🔥 NON-LINEAR (BEST FOR YOUR PROJECT)
+        elif self.model_type == "rbf_approx":
+            return SGDClassifier(
+                loss="hinge",
+                alpha=3e-5,
+                max_iter=4000,
+                tol=1e-4,
+                class_weight=self.class_weight,
+                learning_rate="optimal",
+                early_stopping=False,
+                n_jobs=-1,
+                random_state=self.random_state
             )
 
         else:
-            raise ValueError("Invalid model_type")
+            raise ValueError("❌ Use: 'sgd', 'linear', or 'rbf_approx'")
 
-        # Create pipeline (applies steps sequentially)
-        self.model = make_pipeline(*steps)
+    # =====================================
+    # PIPELINE BUILDER
+    # =====================================
+    def build_pipeline(self):
+        """
+        Combine all components into pipeline
+        """
+        steps = []
+
+        # ---- PCA ----
+        if self.use_pca:
+            steps.append(("pca", self.build_pca()))
+
+        # ---- RBF (only for non-linear) ----
+        if self.model_type == "rbf_approx":
+            steps.append(("rbf", self.build_rbf()))
+
+        # ---- Classifier ----
+        steps.append(("clf", self.build_classifier()))
+
+        return Pipeline(steps)
 
     # =====================================
     # TRAIN
     # =====================================
     def train(self, X, y):
-        """
-        Trains the model on given data.
-        """
         print(f"\n🚀 Training {self.model_type.upper()} model...")
         start = time.time()
 
-        # Fit pipeline (applies PCA → Model training)
         self.model.fit(X, y)
 
-        print(f"✅ Training complete (Time: {time.time() - start:.2f} sec)")
+        print(f"✅ Done in {time.time() - start:.2f} sec")
 
     # =====================================
     # PREDICT
     # =====================================
     def predict(self, X):
-        """
-        Predict labels for given input.
-        """
         return self.model.predict(X)
+
+    # =====================================
+    # DECISION SCORES
+    # =====================================
+    def decision_scores(self, X):
+        """
+        Used for ROC-AUC
+        """
+        clf = self.model.named_steps["clf"]
+        return clf.decision_function(X)
 
     # =====================================
     # EVALUATE
     # =====================================
     def evaluate(self, X, y):
-        """
-        Evaluates model performance.
-        Outputs:
-        - Accuracy
-        - Precision, Recall, F1-score
-        """
         y_pred = self.predict(X)
 
-        # Compute accuracy
         acc = accuracy_score(y, y_pred)
 
         print(f"\n🎯 Accuracy: {acc:.4f}")
         print("\n📊 Classification Report:")
         print(classification_report(y, y_pred))
 
+        # ---- ROC-AUC ----
+        try:
+            scores = self.decision_scores(X)
+            auc = roc_auc_score(y, scores)
+            print(f"\n📈 ROC-AUC: {auc:.4f}")
+        except Exception:
+            print("⚠️ ROC-AUC not available")
+
         return acc
 
     # =====================================
-    # SAVE
+    # SAVE / LOAD
     # =====================================
     def save(self, path):
-        """
-        Saves trained model to disk.
-        """
         with open(path, "wb") as f:
             pickle.dump(self.model, f)
 
-        print(f"💾 Model saved → {path}")
-
-    # =====================================
-    # LOAD
-    # =====================================
     def load(self, path):
-        """
-        Loads model from disk.
-        """
         with open(path, "rb") as f:
             self.model = pickle.load(f)
-
-        print(f"📂 Model loaded ← {path}")
