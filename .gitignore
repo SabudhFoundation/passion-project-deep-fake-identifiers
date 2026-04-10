@@ -219,3 +219,4 @@ train.csv
 valid.csv
 real-vs-fake
 features
+.pkl
