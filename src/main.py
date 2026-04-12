@@ -1,16 +1,24 @@
 import cv2
 from src.feature_engineering.build_features import FeatureBuilder
 
-# Load image
-image = cv2.imread("test.jpg")  # put any image here
+def main():
+    # Correct path (your image is inside src/)
+    image_path = "src/test.jpg"
 
-if image is None:
-    raise ValueError("Image not found!")
+    image = cv2.imread(image_path)
 
-# Initialize
-builder = FeatureBuilder()
+    if image is None:
+        raise ValueError("❌ Image not found!")
 
-# Extract features
-features = builder.extract_features(image)
+    # Initialize Feature Builder
+    builder = FeatureBuilder()
 
-print("Feature vector shape:", features.shape)
+    # Extract features
+    features = builder.extract_features(image)
+
+    print("✅ Feature extraction successful!")
+    print("Feature vector shape:", features.shape)
+
+
+if __name__ == "__main__":
+    main()
