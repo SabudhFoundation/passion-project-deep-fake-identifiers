@@ -9,6 +9,8 @@ print("File is running...")
 # ==============================
 # 1. LBP Feature Extraction
 # ==============================
+
+
 def extract_lbp_features(image):
     """
     Input: image (numpy array)
@@ -97,7 +99,7 @@ def save_features(dataset_path, output_file):
 if __name__ == "__main__":
     print(" Starting LBP feature extraction pipeline...\n")
 
-    base_path = "real-vs-fake"
+    base_path = r"C:\Users\Taniya vaidya\Downloads\archive (12)\real_vs_fake\real-vs-fake"
 
     # Create output folder
     os.makedirs("features", exist_ok=True)
