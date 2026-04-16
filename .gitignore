@@ -221,3 +221,12 @@ real-vs-fake
 features
 .pkl
 src/utils/combined_features
+# =============================
+# Project specific (IMPORTANT)
+# =============================
+
+deepfake_dataset/
+features/
+*.pkl
+.env
+*.jpg
