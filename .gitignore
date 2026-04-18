@@ -214,19 +214,26 @@ Temporary Items/
 # If you want to ignore all hidden files except `.gitignore` itself:
 # .*/ 
 # !/.gitignore
+# =============================
+# Project specific (cleaned)
+# =============================
+
+# CSV (generated splits)
 test.csv
 train.csv
 valid.csv
-real-vs-fake
-features
-.pkl
-src/utils/combined_features
-# =============================
-# Project specific (IMPORTANT)
-# =============================
 
+# Dataset (large)
 deepfake_dataset/
+real-vs-fake/
+
+# Generated features
 features/
+src/utils/combined_features/
+
+# Models
+models/
 *.pkl
+
+# Environment
 .env
-*.jpg
