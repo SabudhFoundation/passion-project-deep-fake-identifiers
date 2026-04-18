@@ -1,31 +1,39 @@
 import os
 import pickle
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
+import numpy as np
 
 
-def train_and_save(X, y, model, name):
+def train_and_save_model(X_train, y_train, X_valid, y_valid, model, model_name, model_dir):
+    
+    if len(X_train) == 0:
+        print(f"Skipping {model_name} (no data)")
+        return None
 
-    if len(X) == 0:
-        print(f"❌ Skipping {name} (no data)")
-        return
+    print(f"\nTraining {model_name}...")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    # =========================
+    # TRAIN
+    # =========================
+    model.train(X_train, y_train)
 
-    print(f"\n🚀 Training {name}...")
-    model.fit(X_train, y_train)
+    # =========================
+    # VALIDATION
+    # =========================
+    val_acc = model.evaluate(X_valid, y_valid)
 
-    y_pred = model.predict(X_test)
+    print(f"{model_name} Validation Accuracy: {val_acc:.4f}")
 
-    acc = accuracy_score(y_test, y_pred)
-    print(f"✅ {name} Accuracy: {acc:.4f}")
-    print(classification_report(y_test, y_pred))
+    # =========================
+    # SAVE MODEL
+    # =========================
+    os.makedirs(model_dir, exist_ok=True)
 
-    os.makedirs("src/models", exist_ok=True)
+    model_path = os.path.join(model_dir, f"{model_name}.pkl")
+    model.save(model_path)
 
-    with open(f"src/models/{name}.pkl", "wb") as f:
-        pickle.dump(model, f)
+    print(f"Saved model: {model_path}")
 
-    print(f"💾 Saved: src/models/{name}.pkl")
+    return {
+        "model_name": model_name,
+        "val_accuracy": val_acc
+    }
