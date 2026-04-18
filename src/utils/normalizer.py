@@ -4,12 +4,12 @@ import pickle
 
 class FeatureNormalizer:
     """
-    Feature Normalizer for LBP + GLCM + FFT
+    Feature Normalizer for [LBP | GLCM | FFT]
 
-    Key Design:
-    - Each feature normalized independently
-    - FFT has special preprocessing (energy + log)
-    - Supports feature weighting (optional)
+    Features:
+    - Independent normalization per feature group
+    - FFT preprocessing (energy normalization + log scaling)
+    - Optional feature weighting
     """
 
     def __init__(
@@ -32,22 +32,18 @@ class FeatureNormalizer:
         self.glcm_weight = glcm_weight
         self.lbp_scale = lbp_scale
 
-        # stores normalization parameters
         self.params = {}
 
     # =====================================
-    # FEATURE SPLITTING
+    # SPLIT FEATURES
     # =====================================
     def split_features(self, X):
-        """
-        Split input into:
-        [LBP | GLCM | FFT]
-        """
-        lbp = X[:, :self.lbp_dim]
+        if X.ndim != 2:
+            raise ValueError("Input must be 2D array [samples, features]")
 
+        lbp = X[:, :self.lbp_dim]
         glcm_end = self.lbp_dim + self.glcm_dim
         glcm = X[:, self.lbp_dim:glcm_end]
-
         fft = X[:, glcm_end:]
 
         return lbp, glcm, fft
@@ -56,9 +52,6 @@ class FeatureNormalizer:
     # LBP
     # =====================================
     def fit_lbp(self, lbp):
-        """
-        Compute statistics for LBP normalization
-        """
         if not self.lbp_scale:
             return
 
@@ -66,9 +59,6 @@ class FeatureNormalizer:
         self.params["lbp_std"] = np.std(lbp, axis=0) + 1e-8
 
     def transform_lbp(self, lbp):
-        """
-        Apply LBP normalization
-        """
         if not self.lbp_scale:
             return lbp
 
@@ -78,16 +68,10 @@ class FeatureNormalizer:
     # GLCM
     # =====================================
     def fit_glcm(self, glcm):
-        """
-        Compute statistics for GLCM
-        """
         self.params["glcm_mean"] = np.mean(glcm, axis=0)
         self.params["glcm_std"] = np.std(glcm, axis=0) + 1e-8
 
     def transform_glcm(self, glcm):
-        """
-        Normalize GLCM + apply weighting
-        """
         glcm = (glcm - self.params["glcm_mean"]) / self.params["glcm_std"]
         return glcm * self.glcm_weight
 
@@ -95,13 +79,7 @@ class FeatureNormalizer:
     # FFT PROCESSING
     # =====================================
     def process_fft(self, fft):
-        """
-        FFT preprocessing:
-        1. Normalize energy per sample
-        2. Log scaling (stabilizes variance)
-        """
-
-        # Energy normalization
+        # Energy normalization (per sample)
         if self.use_energy_norm:
             energy = np.sum(np.abs(fft), axis=1, keepdims=True) + 1e-8
             fft = fft / energy
@@ -116,18 +94,12 @@ class FeatureNormalizer:
     # FFT
     # =====================================
     def fit_fft(self, fft):
-        """
-        Compute statistics AFTER preprocessing
-        """
         fft = self.process_fft(fft)
 
         self.params["fft_mean"] = np.mean(fft, axis=0)
         self.params["fft_std"] = np.std(fft, axis=0) + 1e-8
 
     def transform_fft(self, fft):
-        """
-        Normalize FFT + apply weighting
-        """
         fft = self.process_fft(fft)
         fft = (fft - self.params["fft_mean"]) / self.params["fft_std"]
 
@@ -137,22 +109,18 @@ class FeatureNormalizer:
     # MAIN FIT
     # =====================================
     def fit(self, X):
-        """
-        Fit all feature groups independently
-        """
         lbp, glcm, fft = self.split_features(X)
 
         self.fit_lbp(lbp)
         self.fit_glcm(glcm)
         self.fit_fft(fft)
 
+        return self   # enables chaining
+
     # =====================================
     # MAIN TRANSFORM
     # =====================================
     def transform(self, X):
-        """
-        Apply normalization to full feature vector
-        """
         lbp, glcm, fft = self.split_features(X)
 
         lbp = self.transform_lbp(lbp)
@@ -165,22 +133,15 @@ class FeatureNormalizer:
     # FIT + TRANSFORM
     # =====================================
     def fit_transform(self, X):
-        self.fit(X)
-        return self.transform(X)
+        return self.fit(X).transform(X)
 
     # =====================================
     # SAVE / LOAD
     # =====================================
     def save(self, path):
-        """
-        Save normalizer (for inference consistency)
-        """
         with open(path, "wb") as f:
             pickle.dump(self.__dict__, f)
 
     def load(self, path):
-        """
-        Load saved normalizer
-        """
         with open(path, "rb") as f:
             self.__dict__.update(pickle.load(f))

@@ -4,133 +4,127 @@ import os
 import pickle
 from skimage.feature import graycomatrix, graycoprops
 
-print("GLCM file is running...")
 
 # ================================
-# 1. GLCM Feature Extraction
+# 1. GLCM FEATURE EXTRACTION
 # ================================
+def extract_glcm_features(
+    image,
+    img_size=128,
+    distances=[1],
+    angles=[0],
+    props=None
+):
+    """
+    Extract GLCM features from an image.
 
-def extract_glcm_features(image):
+    Parameters:
+    ----------
+    image : np.ndarray
+        Input image
+
+    img_size : int
+        Resize dimension
+
+    distances : list
+        GLCM distances
+
+    angles : list
+        GLCM angles
+
+    props : list
+        Properties to extract
+
+    Returns:
+    -------
+    np.ndarray
+        Feature vector
     """
-    Input: image (numpy array)
-    Output: feature vector (1D numpy array)
-    """
+
+    if image is None:
+        return None
+
+    if props is None:
+        props = ["contrast", "energy", "homogeneity", "correlation"]
 
     # Convert to grayscale
-    if len(image.shape) == 3:
+    if image.ndim == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Resize (same as LBP for consistency)
-    image = cv2.resize(image, (128, 128))
+    # Resize
+    image = cv2.resize(image, (img_size, img_size))
+
+    # Normalize to uint8 (important for GLCM)
+    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
 
     # Compute GLCM
     glcm = graycomatrix(
         image,
-        distances=[1],
-        angles=[0],
+        distances=distances,
+        angles=angles,
         levels=256,
         symmetric=True,
         normed=True
     )
 
     # Extract features
-    contrast = graycoprops(glcm, 'contrast')[0, 0]
-    energy = graycoprops(glcm, 'energy')[0, 0]
-    homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-    correlation = graycoprops(glcm, 'correlation')[0, 0]
-
-    return np.array([contrast, energy, homogeneity, correlation])
-
-
-# ================================
-# 2. Process Dataset
-# ================================
-
-def process_dataset(dataset_path):
     features = []
-    labels = []
+    for prop in props:
+        val = graycoprops(glcm, prop)
+        features.append(np.mean(val))  # handles multiple angles/distances
 
-    for label in ["real", "fake"]:
-        folder = os.path.join(dataset_path, label)
-        print(f"Checking folder: {folder}")
+    return np.array(features, dtype=np.float32)
 
-        if not os.path.exists(folder):
-            print("Folder not found")
+
+# ================================
+# 2. DATASET PROCESSING
+# ================================
+def process_dataset(dataset_path, extractor):
+    X, y = [], []
+
+    for label_name, label_val in [("real", 0), ("fake", 1)]:
+        folder = os.path.join(dataset_path, label_name)
+
+        if not os.path.isdir(folder):
             continue
 
         files = os.listdir(folder)
-        print(f"Total files: {len(files)}")
-
-        count = 0
 
         for file in files:
-            # Only process image files
-            if not file.endswith((".jpg", ".jpeg", ".png")):
+            if not file.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
 
-            img_path = os.path.join(folder, file)
-            img = cv2.imread(img_path)
+            path = os.path.join(folder, file)
+            img = cv2.imread(path)
 
             if img is None:
                 continue
 
-            # Extract features
-            feat = extract_glcm_features(img)
-            features.append(feat)
-            labels.append(0 if label == "real" else 1)
+            feat = extractor(img)
 
-            count += 1
+            if feat is not None:
+                X.append(feat)
+                y.append(label_val)
 
-            # Progress update
-            if count % 100 == 0:
-                print(f"Processed {count} images in {label}")
-
-    return np.array(features), np.array(labels)
+    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32)
 
 
 # ================================
-# 3. Save Features
+# 3. SAVE FEATURES
 # ================================
+def save_features(dataset_path, output_file, extractor=extract_glcm_features):
+    """
+    Extract and save features.
+    """
 
-def save_features(dataset_path, output_file):
-    print(f"\nProcessing dataset: {dataset_path}")
+    X, y = process_dataset(dataset_path, extractor)
 
-    X, y = process_dataset(dataset_path)
+    if X.size == 0:
+        print("⚠️ No data found")
+        return None
 
     with open(output_file, "wb") as f:
         pickle.dump((X, y), f)
 
-    print(f"Saved {output_file} with shape {X.shape}")
-
-
-# ================================
-# 4. Main Execution
-# ================================
-
-if __name__ == "__main__":
-    print("Starting GLCM feature extraction pipeline...\n")
-
-    base_path = "real-vs-fake"
-
-    # Create output folder
-    os.makedirs("features", exist_ok=True)
-
-    # Train
-    save_features(
-        os.path.join(base_path, "train"),
-        "features/train_glcm_features.pkl"
-    )
-
-    # Validation
-    save_features(
-        os.path.join(base_path, "valid"),
-        "features/valid_glcm_features.pkl"
-    )
-
-    # Test
-    save_features(
-        os.path.join(base_path, "test"),
-        "features/test_glcm_features.pkl"
-    )
-
-    print("\nAll datasets processed successfully!")
+    print(f"Saved: {output_file}, Shape: {X.shape}")
+    return X.shape
