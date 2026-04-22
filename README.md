@@ -222,6 +222,19 @@ deepfake_dataset/
 
 ## 📊 Results
 
+### 📊 Final Results (MLP)
+
+| Features | Validation Accuracy | Test Accuracy | Validation AUC | Test AUC   |
+| -------- | ------------------- | ------------- | -------------- | ---------- |
+| GLCM     | 66.46%              | 66.89%        | 0.7293         | 0.7351     |
+| LBP      | 80.28%              | 79.78%        | 0.8854         | 0.8838     |
+| FFT      | 63.18%              | 63.32%        | 0.6829         | 0.6855     |
+| Combined | **82.52%**          | **82.33%**    | **0.9026**     | **0.9018** |
+
+> The combined feature model achieves the best performance, demonstrating the effectiveness of feature fusion for deepfake detection.
+
+---
+
 ### 🔹 GLCM Model
 
 * Accuracy: **0.6665**
@@ -240,21 +253,21 @@ deepfake_dataset/
 * Precision: ~0.63
 * Recall: ~0.63
 
-### 🔥 Combined Model (Best)
+### 🔥 Combined Model (Best Performing)
 
 * Accuracy: **0.8235**
 * Precision: ~0.82
 * Recall: ~0.82
 * F1-score: ~0.82
- 
+
 ---
 
 ## 📈 Key Insights
 
-* LBP performs best among individual features
-* FFT alone is weak but adds value in combination
-* Combining features improves performance significantly
-* Classical ML can achieve strong results without CNNs
+* LBP performs best among individual features due to strong texture representation.
+* FFT alone is weaker but contributes useful frequency-domain information.
+* Combining LBP, GLCM, and FFT significantly improves both accuracy and ROC-AUC.
+* Feature fusion enables classical machine learning models to achieve strong performance without deep learning.
 
 ---
 
@@ -305,13 +318,14 @@ src/models/
 
 ### 1. Install dependencies
 
-```bash
+```
 pip install -r requirements.txt
 ```
 
 ### 2. Train models
 
-```bash
+
+```
 python -m src.train_mlp
 ```
 
@@ -319,18 +333,18 @@ python -m src.train_mlp
 
 ## ⚠️ Notes
 
-* Dataset is **not included** in repo (too large)
-* `.pkl` files are ignored via `.gitignore`
-* Designed for CPU-based training (no GPU required)
+* Dataset is **not included** in the repository due to large size.
+* `.pkl` files are ignored using `.gitignore`.
+* Designed for CPU-based training (no GPU required).
 
 ---
 
 ## 🔮 Future Work
 
 * Replace MLP with CNN / Vision Transformers
-* Add real-time deepfake detection
-* Improve FFT feature engineering
-* Hyperparameter tuning
+* Add real-time deepfake detection system
+* Improve FFT feature extraction techniques
+* Perform advanced hyperparameter tuning
 
 ---
 
@@ -338,4 +352,3 @@ python -m src.train_mlp
 
 Liyakat Hussain
 
----

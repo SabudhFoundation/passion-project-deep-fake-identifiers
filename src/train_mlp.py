@@ -2,14 +2,17 @@ import os
 import pickle
 import numpy as np
 
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    roc_auc_score
+)
 from sklearn.neural_network import MLPClassifier
 
 
 # ==========================================
-# LOAD FEATURES (STREAM FORMAT)
+# LOAD FEATURES
 # ==========================================
 def load_features(file_path):
     X, y = [], []
@@ -23,61 +26,83 @@ def load_features(file_path):
         except EOFError:
             pass
 
-    # 🔥 MEMORY OPTIMIZATION
     return np.array(X, dtype=np.float32), np.array(y)
 
 
 # ==========================================
-# TRAIN + EVALUATE + SAVE
+# TRAIN + VALIDATE + TEST
 # ==========================================
-def train_model(X, y, name):
+def train_model(X_train, y_train, X_val, y_val, X_test, y_test, name):
 
     print(f"\n🚀 Training {name}")
 
-    # Split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=42
-    )
-
-    # 🔥 FEATURE SCALING (CRITICAL)
+    # ==========================================
+    # SCALING
+    # ==========================================
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
+    X_val = scaler.transform(X_val)
     X_test = scaler.transform(X_test)
 
-    # 🔥 OPTIMIZED MLP FOR LARGE DATA
+    # ==========================================
+    # MODEL
+    # ==========================================
     model = MLPClassifier(
         hidden_layer_sizes=(512, 256, 128),
         activation='relu',
         solver='adam',
-        batch_size=256,          # 🔥 faster for large data
-        max_iter=80,             # 🔥 reduced training time
+        batch_size=256,
+        max_iter=80,
         early_stopping=True,
-        verbose=True,
+        verbose=False,
         random_state=42
     )
 
-    # Train
     model.fit(X_train, y_train)
 
-    # Predict
-    y_pred = model.predict(X_test)
+    # ==========================================
+    # VALIDATION
+    # ==========================================
+    y_val_pred = model.predict(X_val)
+    y_val_prob = model.predict_proba(X_val)[:, 1]
 
-    # Metrics
-    acc = accuracy_score(y_test, y_pred)
+    val_acc = accuracy_score(y_val, y_val_pred)
+    val_auc = roc_auc_score(y_val, y_val_prob)
 
-    print(f"\n📊 {name} Results")
-    print(f"Accuracy: {acc:.4f}")
-    print(classification_report(y_test, y_pred))
+    # ==========================================
+    # TEST
+    # ==========================================
+    y_test_pred = model.predict(X_test)
+    y_test_prob = model.predict_proba(X_test)[:, 1]
 
-    # Save model + scaler
-    save_path = f"src/models/{name}.pkl"
-    with open(save_path, "wb") as f:
-        pickle.dump({
-            "model": model,
-            "scaler": scaler
-        }, f)
+    test_acc = accuracy_score(y_test, y_test_pred)
+    test_auc = roc_auc_score(y_test, y_test_prob)
 
-    print(f"💾 Saved: {save_path}")
+    # ==========================================
+    # PRINT METRICS
+    # ==========================================
+    print(f"\n📊 {name}")
+
+    print("\n--- Validation ---")
+    print(f"Accuracy: {val_acc:.4f}")
+    print(f"ROC-AUC: {val_auc:.4f}")
+    print(classification_report(y_val, y_val_pred))
+
+    print("\n--- Test ---")
+    print(f"Accuracy: {test_acc:.4f}")
+    print(f"ROC-AUC: {test_auc:.4f}")
+    print(classification_report(y_test, y_test_pred))
+
+    # ==========================================
+    # SAVE MODEL
+    # ==========================================
+    save_dir = os.path.join("src", "models")
+    os.makedirs(save_dir, exist_ok=True)
+
+    with open(os.path.join(save_dir, f"{name}.pkl"), "wb") as f:
+        pickle.dump({"model": model, "scaler": scaler}, f)
+
+    return val_acc, test_acc, val_auc, test_auc
 
 
 # ==========================================
@@ -98,43 +123,48 @@ def main():
 
     X_train, y_train = load_features(os.path.join(FEATURE_DIR, "train_features.pkl"))
     X_valid, y_valid = load_features(os.path.join(FEATURE_DIR, "valid_features.pkl"))
-
-    # Combine datasets
-    X = np.vstack((X_train, X_valid))
-    y = np.hstack((y_train, y_valid))
-
-    print("Final dataset shape:", X.shape)
+    X_test, y_test = load_features(os.path.join(FEATURE_DIR, "test_features.pkl"))
 
     # ==========================================
-    # 🔥 FEATURE SPLITTING
+    # FEATURE SPLITTING
     # ==========================================
-    # Adjust if needed based on your feature design
     glcm_dim = 24
     lbp_dim = 128
-    fft_dim = X.shape[1] - (glcm_dim + lbp_dim)
 
-    glcm = X[:, :glcm_dim]
-    lbp = X[:, glcm_dim:glcm_dim + lbp_dim]
-    fft = X[:, glcm_dim + lbp_dim:]
+    # TRAIN
+    glcm_train = X_train[:, :glcm_dim]
+    lbp_train = X_train[:, glcm_dim:glcm_dim + lbp_dim]
+    fft_train = X_train[:, glcm_dim + lbp_dim:]
 
-    print("\nFeature Shapes:")
-    print("GLCM:", glcm.shape)
-    print("LBP:", lbp.shape)
-    print("FFT:", fft.shape)
+    # VALID
+    glcm_val = X_valid[:, :glcm_dim]
+    lbp_val = X_valid[:, glcm_dim:glcm_dim + lbp_dim]
+    fft_val = X_valid[:, glcm_dim + lbp_dim:]
 
-    # ==========================================
-    # TRAIN INDIVIDUAL MODELS
-    # ==========================================
-    train_model(glcm, y, "glcm_mlp")
-    train_model(lbp, y, "lbp_mlp")
-    train_model(fft, y, "fft_mlp")
+    # TEST
+    glcm_test = X_test[:, :glcm_dim]
+    lbp_test = X_test[:, glcm_dim:glcm_dim + lbp_dim]
+    fft_test = X_test[:, glcm_dim + lbp_dim:]
 
     # ==========================================
-    # TRAIN COMBINED MODEL
+    # TRAIN MODELS
     # ==========================================
-    train_model(X, y, "combined_mlp")
+    results = []
 
-    print("\n✅ ALL MODELS TRAINED & SAVED!")
+    results.append(("GLCM",) + train_model(glcm_train, y_train, glcm_val, y_valid, glcm_test, y_test, "GLCM_MLP"))
+    results.append(("LBP",) + train_model(lbp_train, y_train, lbp_val, y_valid, lbp_test, y_test, "LBP_MLP"))
+    results.append(("FFT",) + train_model(fft_train, y_train, fft_val, y_valid, fft_test, y_test, "FFT_MLP"))
+    results.append(("Combined",) + train_model(X_train, y_train, X_valid, y_valid, X_test, y_test, "COMBINED_MLP"))
+
+    # ==========================================
+    # FINAL TABLE
+    # ==========================================
+    print("\n\n📊 FINAL RESULTS TABLE\n")
+    print(f"{'Features':<12} {'Val Acc':<10} {'Test Acc':<10} {'Val AUC':<10} {'Test AUC':<10}")
+    print("-" * 60)
+
+    for feat, val_acc, test_acc, val_auc, test_auc in results:
+        print(f"{feat:<12} {val_acc*100:.2f}%    {test_acc*100:.2f}%    {val_auc:.4f}    {test_auc:.4f}")
 
 
 # ==========================================
