@@ -232,7 +232,7 @@ features/
 src/utils/combined_features/
 
 # Models
-models/
+
 *.pkl
 
 # Environment
