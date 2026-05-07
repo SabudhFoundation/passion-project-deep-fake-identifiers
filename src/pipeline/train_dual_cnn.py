@@ -1,18 +1,32 @@
 import os
+
 from torchvision import datasets, transforms
+
 from torch.utils.data import DataLoader
-from models.cnn import train_cnn_pipeline
+
+from models.dual_cnn import train_dual_cnn_pipeline
 
 
 def get_transforms(image_size):
 
     transform = transforms.Compose([
+
         transforms.Resize(
             (image_size, image_size)
         ),
+
         transforms.RandomHorizontalFlip(),
+
         transforms.RandomRotation(10),
-        transforms.ToTensor()
+
+        transforms.ToTensor(),
+
+        transforms.Normalize(
+
+            mean=[0.5, 0.5, 0.5],
+
+            std=[0.5, 0.5, 0.5]
+        )
     ])
 
     return transform
@@ -127,7 +141,7 @@ def create_dataloaders(
     )
 
 
-def run_cnn_training(
+def run_dual_cnn_training(
     dataset_dir,
     model_dir,
     epochs,
@@ -168,18 +182,24 @@ def run_cnn_training(
         batch_size
     )
 
-    print("\nStarting CNN Training...\n")
+    print("\nStarting Dual Stream CNN Training...\n")
 
-    train_cnn_pipeline(
+    train_dual_cnn_pipeline(
+
         train_loader=train_loader,
+
         valid_loader=valid_loader,
+
         test_loader=test_loader,
+
         model_dir=model_dir,
+
         epochs=epochs,
+
         learning_rate=learning_rate
     )
 
-    print("\nCNN Training Completed!\n")
+    print("\nDual Stream CNN Training Completed!\n")
 
 
 if __name__ == "__main__":
@@ -197,11 +217,18 @@ if __name__ == "__main__":
         BASE_DIR,
         "../../models"
     )
-    run_cnn_training(
+
+    run_dual_cnn_training(
+
         dataset_dir=dataset_dir,
+
         model_dir=model_dir,
+
         epochs=10,
+
         batch_size=8,
-        image_size=224,
+
+        image_size=192,
+
         learning_rate=0.0001
     )
