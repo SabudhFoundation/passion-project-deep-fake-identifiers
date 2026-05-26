@@ -163,7 +163,7 @@ def train():
     # =========================
     # SAVE MODEL
     # =========================
-    save_path = "src/models/resnet50_finetuned.keras"
+    save_path = "models/cnn/resnet50_finetuned.keras"
     model.save(save_path)
 
     print(f"\n💾 Model Saved: {save_path}")

@@ -13,7 +13,7 @@ from sklearn.metrics import (accuracy_score, precision_score,
                               roc_auc_score, confusion_matrix)
 import matplotlib.pyplot as plt
 import seaborn as sns
-from src.models.dual_channel.model import DualChannelDetector
+from src.models.dual_channel.detector import DualChannelDetector
 
 # ── Args ──────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
@@ -30,7 +30,7 @@ args = parser.parse_args()
 
 DEVICE    = 'cuda' if torch.cuda.is_available() else 'cpu'
 SAVE_DIR  = 'reports/figures'
-MODEL_DIR = 'src/models'
+MODEL_DIR = 'models/dual_channel'
 os.makedirs(SAVE_DIR,  exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 

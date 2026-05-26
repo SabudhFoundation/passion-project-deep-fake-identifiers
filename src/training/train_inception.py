@@ -6,7 +6,7 @@ from tensorflow.keras.applications import InceptionV3
 from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
 from tensorflow.keras.models import Model
 
-from src.utils.resnet import get_data_generators
+from src.training.train_resnet import get_data_generators
 
 
 # ==========================================
@@ -129,7 +129,7 @@ def train():
     # =========================
     # SAVE MODEL
     # =========================
-    save_path = "src/models/inceptionv3_finetuned.keras"
+    save_path = "models/cnn/inceptionv3_finetuned.keras"
     model.save(save_path)
 
     print(f"\n💾 Model Saved: {save_path}")

@@ -4,18 +4,18 @@ import time
 import os
 import numpy as np
 
-# 🔥 Correct imports (based on your refactored modules)
-from normalizer import FeatureNormalizer
-from models.svm_models import SVMClassifier
+from src.models.normalizer import FeatureNormalizer
+from src.models.svm_classifier import SVMClassifier
 
 
 # =====================================
 # PATH SETUP
 # =====================================
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 
-FEATURE_DIR = os.path.join(BASE_DIR, "features")
-MODEL_DIR = os.path.join(BASE_DIR, "..", "models")
+FEATURE_DIR = os.path.join(PROJECT_ROOT, "data", "features", "fft_only")
+MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "svm")
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 

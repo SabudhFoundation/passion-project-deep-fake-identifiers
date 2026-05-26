@@ -71,8 +71,8 @@ TEST_DIR = os.path.join(DATASET_DIR, "test")
 
 MODEL_DIR = os.path.join(
     BASE_DIR,
-    "src",
-    "models"
+    "models",
+    "cnn"
 )
 
 os.makedirs(MODEL_DIR, exist_ok=True)

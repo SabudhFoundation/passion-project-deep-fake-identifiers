@@ -13,3 +13,16 @@ scikit-learn
 scikit-image
 tqdm
 joblib
+
+# API server
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+pydantic>=2.0.0
+
+# Deep learning — required for CNN and dual-channel methods
+# SVM/MLP methods work without these
+tensorflow>=2.15.0
+torch>=2.0.0
+torchvision>=0.15.0
+Pillow>=9.0.0
