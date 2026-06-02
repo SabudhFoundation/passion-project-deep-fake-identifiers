@@ -228,12 +228,15 @@ deepfake_dataset/
 real-vs-fake/
 
 # Generated features
-features/
+/features/
 src/utils/combined_features/
 
 # Models
-models/
+/models/
 *.pkl
+
+# Trained model files
+*.keras
 
 # Environment
 .env
