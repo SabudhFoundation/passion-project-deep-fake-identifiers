@@ -4,8 +4,6 @@ import os
 import pickle
 from skimage.feature import local_binary_pattern
 
-print("File is running...")
-
 # ==============================
 # 1. LBP Feature Extraction
 # ==============================

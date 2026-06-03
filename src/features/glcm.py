@@ -4,8 +4,6 @@ import os
 import pickle
 from skimage.feature import graycomatrix, graycoprops
 
-print("GLCM file is running...")
-
 # ================================
 # 1. GLCM Feature Extraction
 # ================================

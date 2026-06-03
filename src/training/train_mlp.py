@@ -96,10 +96,10 @@ def train_model(X_train, y_train, X_val, y_val, X_test, y_test, name):
     # ==========================================
     # SAVE MODEL
     # ==========================================
-    save_dir = os.path.join("src", "models")
+    save_dir = os.path.join("models", "mlp")
     os.makedirs(save_dir, exist_ok=True)
 
-    with open(os.path.join(save_dir, f"{name}.pkl"), "wb") as f:
+    with open(os.path.join(save_dir, f"{name.lower()}.pkl"), "wb") as f:
         pickle.dump({"model": model, "scaler": scaler}, f)
 
     return val_acc, test_acc, val_auc, test_auc
@@ -151,10 +151,10 @@ def main():
     # ==========================================
     results = []
 
-    results.append(("GLCM",) + train_model(glcm_train, y_train, glcm_val, y_valid, glcm_test, y_test, "GLCM_MLP"))
-    results.append(("LBP",) + train_model(lbp_train, y_train, lbp_val, y_valid, lbp_test, y_test, "LBP_MLP"))
-    results.append(("FFT",) + train_model(fft_train, y_train, fft_val, y_valid, fft_test, y_test, "FFT_MLP"))
-    results.append(("Combined",) + train_model(X_train, y_train, X_valid, y_valid, X_test, y_test, "COMBINED_MLP"))
+    results.append(("GLCM",) + train_model(glcm_train, y_train, glcm_val, y_valid, glcm_test, y_test, "glcm"))
+    results.append(("LBP",) + train_model(lbp_train, y_train, lbp_val, y_valid, lbp_test, y_test, "lbp"))
+    results.append(("FFT",) + train_model(fft_train, y_train, fft_val, y_valid, fft_test, y_test, "fft"))
+    results.append(("Combined",) + train_model(X_train, y_train, X_valid, y_valid, X_test, y_test, "combined"))
 
     # ==========================================
     # FINAL TABLE

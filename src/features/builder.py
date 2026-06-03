@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.features import lbp, glcm, fft
+from src.features import lbp, glcm, fft_enhanced as fft
 
 
 class FeatureBuilder:

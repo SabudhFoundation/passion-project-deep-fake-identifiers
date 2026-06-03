@@ -4,8 +4,6 @@ import os
 import pickle
 from tqdm import tqdm
 
-print("🚀 Strong FFT-Only Feature Extraction Pipeline Started...")
-
 
 # =====================================
 # 1. FFT Feature Extraction (Stronger)
