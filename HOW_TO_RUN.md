@@ -50,22 +50,34 @@ models/
 
 ---
 
-## 3. Start the API Server
+Running the Deepfake Detection System
+1. Start the FastAPI Backend
 
-Run from the project root (the `python -m` prefix ensures the correct Python environment is used):
+From the project root directory:
 
-```bash
 python -m uvicorn src.inference.api:app --reload
-```
 
-The server starts at `http://localhost:8000`.  
-Interactive docs (Swagger UI): `http://localhost:8000/docs`
+The API will be available at:
 
-To use a different port:
+http://localhost:8000
 
-```bash
+Swagger Documentation:
+
+http://localhost:8000/docs
+
+To run on a different port:
+
 python -m uvicorn src.inference.api:app --reload --port 8080
-```
+2. Start the Streamlit Frontend
+
+Open a second terminal and run:
+
+streamlit run streamlit_app.py
+
+The frontend will be available at:
+
+http://localhost:8501
+
 
 ---
 

@@ -27,3 +27,4 @@ tensorflow>=2.15.0
 # Required for: dual_channel_inception, dual_channel_resnet
 torch>=2.0.0
 torchvision>=0.15.0
+streamlit>=1.0.0
