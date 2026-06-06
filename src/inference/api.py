@@ -70,7 +70,7 @@ METHOD_ACCURACY = {
     "combined_mlp": 82.33,
     "resnet50": 71.80,
     "inceptionv3": 87.63,
-    "efficientnet": 94.41,
+    "efficientnet": 99.94,
     "dual_channel_inception": 98.92,
     "dual_channel_resnet": 98.92,
 }

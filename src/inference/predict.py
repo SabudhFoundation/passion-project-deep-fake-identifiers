@@ -82,8 +82,8 @@ METHOD_CONFIG = {
         None,
     ),
     "efficientnet": (
-        "cnn_efficient",
-        "models/cnn/efficientnet_finetuned.keras",
+        "efficientnet_512",
+        "models/cnn/efficientnet_classifier_512.pth",
         None,
         None,
     ),
@@ -178,6 +178,49 @@ class DeepfakePredictor:
             )
         model = tf.keras.models.load_model(model_path)
         return {"model": model, "family": family}
+    
+    def _load_efficientnet_512(self, method: str):
+        try:
+            import torch
+        except ImportError:
+            raise ImportError(
+                "PyTorch is required for EfficientNet. "
+                "Install: pip install torch torchvision"
+            )
+
+        from src.models.efficientnet512 import EfficientNet512
+
+        model_path = self._abs(
+            "models/cnn/efficientnet_classifier_512.pth"
+        )
+
+        info_path = self._abs(
+            "models/cnn/encoder_info.pth"
+        )
+
+        self._require_file(model_path, method)
+        self._require_file(info_path, method)
+
+        model = EfficientNet512()
+
+        model.load_state_dict(
+            torch.load(
+                model_path,
+                map_location="cpu"
+            )
+        )
+
+        model.eval()
+
+        info = torch.load(
+            info_path,
+            map_location="cpu"
+        )
+
+        return {
+            "model": model,
+            "info": info
+        }
 
     def _load_dual(self, method: str, model_path: str, backbone: str):
         self._require_file(model_path, method)
@@ -205,13 +248,37 @@ class DeepfakePredictor:
 
         if family == "svm":
             normalizer_path = self._abs(extra_rel) if extra_rel else None
-            obj = self._load_svm(method, model_path, normalizer_path, feature_flags)
+            obj = self._load_svm(
+                method,
+                model_path,
+                normalizer_path,
+                feature_flags,
+            )
+
         elif family == "mlp":
-            obj = self._load_mlp(method, model_path, feature_flags)
-        elif family in ("cnn_resnet", "cnn_inception", "cnn_efficient"):
-            obj = self._load_cnn(method, model_path, family)
+            obj = self._load_mlp(
+                method,
+                model_path,
+                feature_flags,
+            )
+
+        elif family in ("cnn_resnet", "cnn_inception"):
+            obj = self._load_cnn(
+                method,
+                model_path,
+                family,
+            )
+
+        elif family == "efficientnet_512":
+            obj = self._load_efficientnet_512(method)
+
         elif family == "dual":
-            obj = self._load_dual(method, model_path, extra_rel)
+            obj = self._load_dual(
+                method,
+                model_path,
+                extra_rel,
+            )
+
         else:
             raise ValueError(f"Unknown method family: {family}")
 
@@ -257,20 +324,61 @@ class DeepfakePredictor:
         img = cv2.imread(image_path)
         if img is None:
             raise FileNotFoundError(f"Could not read image: {image_path}")
+
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, (224, 224)).astype(np.float32)
 
-        if obj["family"] == "cnn_efficient":
-            from tensorflow.keras.applications.efficientnet import preprocess_input
-            img = preprocess_input(img)
-        else:
-            img = img / 255.0
+        img = img / 255.0
 
         img_batch = np.expand_dims(img, 0)
-        prob_fake = float(obj["model"].predict(img_batch, verbose=0)[0][0])
+
+        prob_fake = float(
+            obj["model"].predict(img_batch, verbose=0)[0][0]
+        )
+
         pred = int(prob_fake > 0.5)
         confidence = prob_fake if pred == 1 else 1.0 - prob_fake
-        return {"label": LABEL_MAP[pred], "confidence": confidence, "prediction": pred}
+
+        return {
+            "label": LABEL_MAP[pred],
+            "confidence": confidence,
+            "prediction": pred,
+        }
+    
+    def _predict_efficientnet_512(self, image_path: str, obj: dict) -> dict:
+        import torch
+        from PIL import Image
+        from torchvision import transforms
+
+        img_size = obj["info"].get("image_size", 224)
+
+        transform = transforms.Compose([
+            transforms.Resize((img_size, img_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ])
+
+        image = Image.open(image_path).convert("RGB")
+        tensor = transform(image).unsqueeze(0)
+
+        model = obj["model"]
+        model.eval()
+
+        with torch.no_grad():
+            logits = model(tensor)
+            prob_fake = torch.sigmoid(logits).item()
+
+        pred = int(prob_fake > 0.5)
+        confidence = prob_fake if pred == 1 else 1.0 - prob_fake
+
+        return {
+            "label": LABEL_MAP[pred],
+            "confidence": confidence,
+            "prediction": pred,
+        }
 
     def _predict_dual(self, image_path: str, obj: dict) -> dict:
         import torch
@@ -321,10 +429,16 @@ class DeepfakePredictor:
 
         if family == "svm":
             return self._predict_svm(image_path, obj)
+
         if family == "mlp":
             return self._predict_mlp(image_path, obj)
-        if family in ("cnn_resnet", "cnn_inception", "cnn_efficient"):
+
+        if family in ("cnn_resnet", "cnn_inception"):
             return self._predict_cnn(image_path, obj)
+
+        if family == "efficientnet_512":
+            return self._predict_efficientnet_512(image_path, obj)
+
         if family == "dual":
             return self._predict_dual(image_path, obj)
 

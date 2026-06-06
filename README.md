@@ -17,7 +17,7 @@ A deepfake face-image classifier built across eight experiments, progressing fro
 | 4d | `combined_mlp` | LBP + GLCM + FFT | MLP | **82.33%** |
 | 5 | `resnet50` | CNN (ResNet50) | Fine-tuned sigmoid | 71.80% |
 | 6 | `inceptionv3` | CNN (InceptionV3) | Fine-tuned sigmoid | 87.63% |
-| 7 | `efficientnet` | CNN (EfficientNetB0) | Fine-tuned sigmoid | 94.41% |
+| 7 | `efficientnet` | EfficientNetB0 + 512-D Embedding | PyTorch Binary Classifier | 99.94% |
 | 8a | `dual_channel_inception` | InceptionV3 spatial + FFT freq | Dual-channel (PyTorch) | **98.92%** |
 | 8b | `dual_channel_resnet` | ResNet50 spatial + FFT freq | Dual-channel (PyTorch) | **98.92%** |
 
@@ -38,7 +38,8 @@ passion-project-deep-fake-identifiers/
 │   │   ├── deep_features.py    # EfficientNet CNN embedding extractor
 │   │   └── builder.py          # FeatureBuilder — combines any subset of the above
 │   │
-│   ├── models/                 # Architecture definitions (no trained weights here)
+│   ├── models/ 
+|   │   ├── efficientnet512.py   # EfficientNet512 architecture                
 │   │   ├── svm_classifier.py   # SVMClassifier: PCA → RBFSampler → SGDClassifier + threshold
 │   │   ├── normalizer.py       # FeatureNormalizer: per-group LBP/GLCM/FFT normalization
 │   │   └── dual_channel/
@@ -71,10 +72,12 @@ passion-project-deep-fake-identifiers/
 │   │   ├── lbp.pkl
 │   │   ├── fft.pkl
 │   │   └── combined.pkl
-│   ├── cnn/                    # Populated after running train_*.py CNN scripts
-│   │   ├── resnet50_finetuned.keras
-│   │   ├── inceptionv3_finetuned.keras
-│   │   └── efficientnet_finetuned.keras
+│   ├── ├── cnn/
+|   |   │   ├── resnet50_finetuned.keras
+|   |   │   ├── inceptionv3_finetuned.keras
+|   |   │   ├── efficientnet_classifier_512.pth
+|   |   │   ├── efficientnet_encoder_512.pth
+|   |   │   └── encoder_info.pth
 │   ├── dual_channel/           # Populated after running train_dual_channel.py
 │   │   ├── dual_channel_inception.pth
 │   │   └── dual_channel_resnet.pth
@@ -110,8 +113,9 @@ pip install -r requirements.txt
 ```
 
 SVM and MLP methods only need `scikit-learn`, `opencv-python`, and `scikit-image`.  
-CNN methods additionally need `tensorflow`.  
-Dual-channel methods additionally need `torch` and `torchvision`.
+ResNet50 and InceptionV3 additionally require `TensorFlow`.
+EfficientNet and Dual-Channel methods additionally require:
+`torch`,`torchvision`
 
 ---
 
@@ -146,9 +150,9 @@ python -m src.training.train_svm_features
 python -m src.training.train_mlp
 
 # CNN (TensorFlow / Keras)
-python -m src.training.train_resnet
-python -m src.training.train_inception
-python -m src.training.train_efficientnet
+python -m src.training.train_resnet        # TensorFlow
+python -m src.training.train_inception     # TensorFlow
+python -m src.training.train_efficientnet  # PyTorch
 
 # Dual-channel (PyTorch)
 python -m src.training.train_dual_channel --backbone inception
@@ -210,7 +214,9 @@ curl -X POST http://localhost:8000/predict \
 
 ```json
 HTTP 503
-{ "detail": "Model 'efficientnet' weights not found at: models/cnn/efficientnet_finetuned.keras" }
+{
+  "detail": "Model 'efficientnet' weights not found at: models/cnn/efficientnet_classifier_512.pth"
+}
 ```
 
 ### Programmatic use
