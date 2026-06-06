@@ -1,7 +1,6 @@
 import numpy as np
 
-# Import BOTH class and function styles
-from ..utils import lbp_features, glcm_features, fft_features
+from src.features import lbp, glcm, fft_enhanced as fft
 
 
 class FeatureBuilder:
@@ -10,23 +9,22 @@ class FeatureBuilder:
         self.extractors = []
 
         if use_lbp:
-            # Try class first, else fallback to function
-            if hasattr(lbp_features, "LBPExtractor"):
-                self.extractors.append(lbp_features.LBPExtractor())
-            elif hasattr(lbp_features, "extract_lbp_features"):
-                self.extractors.append(lbp_features.extract_lbp_features)
+            if hasattr(lbp, "LBPExtractor"):
+                self.extractors.append(lbp.LBPExtractor())
+            elif hasattr(lbp, "extract_lbp_features"):
+                self.extractors.append(lbp.extract_lbp_features)
 
         if use_glcm:
-            if hasattr(glcm_features, "GLCMExtractor"):
-                self.extractors.append(glcm_features.GLCMExtractor())
-            elif hasattr(glcm_features, "extract_glcm_features"):
-                self.extractors.append(glcm_features.extract_glcm_features)
+            if hasattr(glcm, "GLCMExtractor"):
+                self.extractors.append(glcm.GLCMExtractor())
+            elif hasattr(glcm, "extract_glcm_features"):
+                self.extractors.append(glcm.extract_glcm_features)
 
         if use_fft:
-            if hasattr(fft_features, "FFTExtractor"):
-                self.extractors.append(fft_features.FFTExtractor())
-            elif hasattr(fft_features, "extract_fft_features"):
-                self.extractors.append(fft_features.extract_fft_features)
+            if hasattr(fft, "FFTExtractor"):
+                self.extractors.append(fft.FFTExtractor())
+            elif hasattr(fft, "extract_fft_features"):
+                self.extractors.append(fft.extract_fft_features)
 
         if len(self.extractors) == 0:
             raise ValueError("No feature extractors selected!")
