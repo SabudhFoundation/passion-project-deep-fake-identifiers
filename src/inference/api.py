@@ -73,6 +73,7 @@ METHOD_ACCURACY = {
     "efficientnet": 99.94,
     "dual_channel_inception": 98.92,
     "dual_channel_resnet": 98.92,
+    "dual_channel":97.97,
 }
 
 

@@ -73,11 +73,11 @@ passion-project-deep-fake-identifiers/
 │   │   ├── fft.pkl
 │   │   └── combined.pkl
 │   ├── ├── cnn/
-|   |   │   ├── resnet50_finetuned.keras
-|   |   │   ├── inceptionv3_finetuned.keras
-|   |   │   ├── efficientnet_classifier_512.pth
-|   |   │   ├── efficientnet_encoder_512.pth
-|   |   │   └── encoder_info.pth
+|   |       ├── resnet50_finetuned.keras
+|   |       ├── inceptionv3_finetuned.keras
+|   |       ├── efficientnet_classifier_512.pth
+|   |       ├── efficientnet_encoder_512.pth
+|   |       └── encoder_info.pth
 │   ├── dual_channel/           # Populated after running train_dual_channel.py
 │   │   ├── dual_channel_inception.pth
 │   │   └── dual_channel_resnet.pth

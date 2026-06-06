@@ -99,6 +99,12 @@ METHOD_CONFIG = {
         "resnet",
         None,
     ),
+    "dual_cnn": (
+        "dual_cnn",
+        "models/dual_channel/dual_cnn.pth",
+        None,
+        None,
+    ),
 }
 
 VALID_METHODS = list(METHOD_CONFIG.keys())
@@ -235,6 +241,30 @@ class DeepfakePredictor:
         model.load_state_dict(torch.load(model_path, map_location="cpu"))
         model.eval()
         return {"model": model, "backbone": backbone}
+    
+    def _load_dual_cnn(self, method: str):
+        import torch
+
+        from src.models.dual_cnn import ImprovedDualStreamCNN
+
+        model_path = self._abs(
+            "models/dual_channel/dual_cnn.pth"
+        )
+
+        self._require_file(model_path, method)
+
+        model = ImprovedDualStreamCNN()
+
+        model.load_state_dict(
+            torch.load(
+                model_path,
+                map_location="cpu"
+            )
+        )
+
+        model.eval()
+
+        return {"model": model}
 
     # ------------------------------------------------------------------
     # Cache-aware model getter
@@ -278,6 +308,9 @@ class DeepfakePredictor:
                 model_path,
                 extra_rel,
             )
+        elif family == "dual_cnn":
+            obj = self._load_dual_cnn(method)
+        
 
         else:
             raise ValueError(f"Unknown method family: {family}")
@@ -403,6 +436,111 @@ class DeepfakePredictor:
         pred = int(prob_fake > 0.5)
         confidence = prob_fake if pred == 1 else 1.0 - prob_fake
         return {"label": LABEL_MAP[pred], "confidence": confidence, "prediction": pred}
+    
+    def _create_fft_image(self, image_path):
+        import cv2
+        import numpy as np
+
+        img = cv2.imread(image_path)
+
+        if img is None:
+            raise FileNotFoundError(
+                f"Could not read image: {image_path}"
+            )
+
+        img = cv2.resize(img, (128, 128))
+
+        gray = cv2.cvtColor(
+            img,
+            cv2.COLOR_BGR2GRAY
+        )
+
+        f = np.fft.fft2(gray)
+
+        fshift = np.fft.fftshift(f)
+
+        magnitude = np.log(
+            np.abs(fshift) + 1
+        )
+
+        magnitude = cv2.normalize(
+            magnitude,
+            None,
+            0,
+            255,
+            cv2.NORM_MINMAX
+        )
+
+        magnitude = magnitude.astype(np.uint8)
+
+        magnitude = cv2.cvtColor(
+            magnitude,
+            cv2.COLOR_GRAY2RGB
+        )
+
+        return magnitude
+    
+    def _predict_dual_cnn(self, image_path: str, obj: dict) -> dict:
+        import torch
+        from PIL import Image
+        from torchvision import transforms
+
+        transform = transforms.Compose([
+            transforms.Resize((128, 128)),
+            transforms.ToTensor(),
+        ])
+
+        # RGB IMAGE
+        rgb_image = Image.open(
+            image_path
+        ).convert("RGB")
+
+        # FFT IMAGE
+        fft_image = self._create_fft_image(
+            image_path
+        )
+
+        fft_image = Image.fromarray(
+            fft_image
+        )
+
+        rgb_tensor = transform(
+            rgb_image
+        ).unsqueeze(0)
+
+        fft_tensor = transform(
+            fft_image
+        ).unsqueeze(0)
+
+        model = obj["model"]
+
+        model.eval()
+
+        with torch.no_grad():
+
+            logits = model(
+                rgb_tensor,
+                fft_tensor
+            )
+
+            prob_fake = torch.sigmoid(
+                logits
+            ).item()
+
+        pred = int(prob_fake > 0.5)
+
+        confidence = (
+            prob_fake
+            if pred == 1
+            else 1.0 - prob_fake
+        )
+
+        return {
+            "label": LABEL_MAP[pred],
+            "confidence": confidence,
+            "prediction": pred,
+        }
+
 
     # ------------------------------------------------------------------
     # Public API
@@ -441,6 +579,8 @@ class DeepfakePredictor:
 
         if family == "dual":
             return self._predict_dual(image_path, obj)
+        if family == "dual_cnn":
+            return self._predict_dual_cnn(image_path, obj)
 
         raise ValueError(f"Unhandled family: {family}")
 
