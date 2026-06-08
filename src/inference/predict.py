@@ -39,6 +39,12 @@ METHOD_CONFIG = {
         None,
         {"use_lbp": False, "use_glcm": False, "use_fft": True},
     ),
+    "glcm_svm": (
+        "svm",
+        "models/svm/glcm_svm.pkl",
+        None,
+        {"use_lbp": False, "use_glcm": True, "use_fft": False},
+    ),
     "combined_svm": (
         "svm",
         "models/svm/svm_features.pkl",
@@ -333,18 +339,49 @@ class DeepfakePredictor:
     # Predictors per family
     # ------------------------------------------------------------------
     def _predict_svm(self, image_path: str, obj: dict) -> dict:
-        features = self._extract_classical_features(image_path, obj["feature_flags"])
+        features = self._extract_classical_features(
+            image_path,
+            obj["feature_flags"]
+        )
+
+        print("Feature shape:", features.shape)
+        pipeline = obj["pipeline"]
+
+        if hasattr(pipeline, "named_steps"):
+            print(
+                "PCA expects:",
+                pipeline.named_steps["pca"].n_features_in_
+            )
+        print("Feature flags:", obj["feature_flags"])
+
         features = features.reshape(1, -1)
+
         if obj["normalizer"] is not None:
             features = obj["normalizer"].transform(features)
+
+        print("Feature shape:", features.shape)
+
+        pipeline = obj["pipeline"]
+
+        if hasattr(pipeline, "named_steps"):
+            print("Pipeline steps:", pipeline.named_steps.keys())
+
+            if "pca" in pipeline.named_steps:
+                print(
+                    "PCA expects:",
+                    pipeline.named_steps["pca"].n_features_in_
+                )
 
         score = float(obj["pipeline"].decision_function(features)[0])
         pred = int(score > obj["threshold"])
         prob_fake = _sigmoid(score)
         confidence = prob_fake if pred == 1 else 1.0 - prob_fake
 
-        return {"label": LABEL_MAP[pred], "confidence": confidence, "prediction": pred}
-
+        return {
+            "label": LABEL_MAP[pred],
+            "confidence": confidence,
+            "prediction": pred
+        }
     def _predict_mlp(self, image_path: str, obj: dict) -> dict:
         features = self._extract_classical_features(image_path, obj["feature_flags"])
         features = obj["scaler"].transform(features.reshape(1, -1))

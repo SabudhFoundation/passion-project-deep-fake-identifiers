@@ -69,17 +69,21 @@ app = FastAPI(
 METHOD_ACCURACY = {
     "lbp_svm": 65.11,
     "fft_svm": 68.34,
+    "glcm_svm": 62.00,
     "combined_svm": 74.87,
+
     "glcm_mlp": 66.89,
     "lbp_mlp": 79.93,
     "fft_mlp": 62.32,
     "combined_mlp": 82.33,
+
     "resnet50": 71.80,
     "inceptionv3": 87.63,
     "efficientnet": 99.94,
+
     "dual_channel_inception": 98.92,
     "dual_channel_resnet": 98.92,
-    "dual_channel": 97.97,
+    "dual_cnn": 97.97,
 }
 
 # ============================================================
