@@ -425,7 +425,7 @@ st.markdown("""
             <span class="member-chip">Anupam Rathore</span>
         </div>
         <span class="mentor-chip">
-            <span class="mentor-label">Mentor</span> Dr. Bappaaditya
+            <span class="mentor-label">Mentor</span> Mr. Bappaditya Chakraborty
         </span>
     </div>
 </div>
