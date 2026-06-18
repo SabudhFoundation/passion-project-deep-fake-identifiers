@@ -611,80 +611,143 @@ with tab2:
 
         if results:
             best = max(results, key=lambda x: x["confidence"])
+
             fake_count = sum(1 for r in results if r["label"] == "FAKE")
             real_count = len(results) - fake_count
-            avg_conf = round(sum(r["confidence"] for r in results) / len(results), 1)
-            consensus = "FAKE" if fake_count > real_count else ("REAL" if real_count > fake_count else "SPLIT")
 
-            cons_color = "#fc8181" if consensus == "FAKE" else ("#68d391" if consensus == "REAL" else "#f6ad55")
+            avg_conf = round(
+                sum(r["confidence"] for r in results) / len(results),
+                1
+            )
 
-            rows_html = ""
-            for r in results:
-                is_winner = r["model"] == best["model"]
-                row_class = "winner-row" if is_winner else ""
-                badge = '<span class="badge-winner">★ BEST</span>' if is_winner else ""
-                label_badge = f'<span class="badge-fake">FAKE</span>' if r["label"] == "FAKE" else f'<span class="badge-real">REAL</span>'
-                bar_pct = r["confidence"]
-                bar_class = "high" if bar_pct >= 70 else ""
-                rows_html += f"""
-                <tr class="{row_class}">
-                    <td class="model-name">{r['model']}{badge}</td>
-                    <td>{label_badge}</td>
-                    <td>
-                        <div class="conf-bar-wrap">
-                            <div class="conf-bar-bg">
-                                <div class="conf-bar-fill {bar_class}" style="width:{bar_pct}%"></div>
-                            </div>
-                            <span style="color:#e2e8f0;font-weight:600;min-width:42px">{bar_pct}%</span>
-                        </div>
-                    </td>
-                    <td style="color:#e2e8f0;font-weight:500">{r['accuracy']}%</td>
-                </tr>
-                """
+            consensus = (
+                "FAKE"
+                if fake_count > real_count
+                else (
+                    "REAL"
+                    if real_count > fake_count
+                    else "SPLIT"
+                )
+            )
 
-            st.markdown(f"""
+            st.markdown("""
             <div class="compare-table-wrap">
-                <div class="compare-table-header">📊 Model Comparison Results</div>
-                <div class="summary-box">
-                    <div class="summary-stat">
-                        <div class="val">{len(results)}</div>
-                        <div class="lbl">Models Tested</div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="val" style="color:{cons_color}">{consensus}</div>
-                        <div class="lbl">Consensus</div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="val">{avg_conf}%</div>
-                        <div class="lbl">Avg Confidence</div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="val" style="color:#63b3ed">{best['model']}</div>
-                        <div class="lbl">Most Confident</div>
-                    </div>
+                <div class="compare-table-header">
+                    📊 Model Comparison Results
                 </div>
-                <table class="ctable">
-                    <thead>
-                        <tr>
-                            <th>Model</th>
-                            <th>Verdict</th>
-                            <th>Confidence</th>
-                            <th>Model Accuracy</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
+
+            with c1:
+                st.markdown(f"""
+                <div class="summary-stat">
+                    <div class="val">{len(results)}</div>
+                    <div class="lbl">Models Tested</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with c2:
+                color = (
+                    "#fc8181"
+                    if consensus == "FAKE"
+                    else (
+                        "#68d391"
+                        if consensus == "REAL"
+                        else "#f6ad55"
+                    )
+                )
+
+                st.markdown(f"""
+                <div class="summary-stat">
+                    <div class="val" style="color:{color}">
+                        {consensus}
+                    </div>
+                    <div class="lbl">Consensus</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with c3:
+                st.markdown(f"""
+                <div class="summary-stat">
+                    <div class="val">{avg_conf}%</div>
+                    <div class="lbl">Avg Confidence</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with c4:
+                st.markdown(f"""
+                <div class="summary-stat">
+                    <div class="val" style="color:#63b3ed">
+                        {best['model']}
+                    </div>
+                    <div class="lbl">Most Confident</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            comparison_df = pd.DataFrame(
+                {
+                    "Model": [r["model"] for r in results],
+                    "Verdict": [r["label"] for r in results],
+                    "Confidence (%)": [r["confidence"] for r in results],
+                    "Model Accuracy (%)": [r["accuracy"] for r in results],
+                }
+            )
+
+            for r in results:
+
+                winner = r["model"] == best["model"]
+
+                title = r["model"]
+
+                if winner:
+                    title += " ⭐ BEST"
+
+                st.divider()
+
+                header_col, verdict_col = st.columns([4, 1])
+
+                with header_col:
+                    st.subheader(title)
+
+                with verdict_col:
+                    if r["label"] == "REAL":
+                        st.success("REAL")
+                    else:
+                        st.error("FAKE")
+
+                st.progress(r["confidence"] / 100)
+
+                metric_col1, metric_col2 = st.columns(2)
+
+                with metric_col1:
+                    st.metric(
+                        "Confidence",
+                        f"{r['confidence']}%"
+                    )
+
+                with metric_col2:
+                    st.metric(
+                        "Model Accuracy",
+                        f"{r['accuracy']}%"
+                    )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
             with st.expander("📋 Export raw comparison data"):
-                df = pd.DataFrame(results)
-                df.columns = ["Model", "Verdict", "Confidence (%)", "Model Accuracy (%)"]
-                st.dataframe(df, use_container_width=True)
-                csv = df.to_csv(index=False)
+
+                st.dataframe(
+                    comparison_df,
+                    use_container_width=True
+                )
+
+                csv = comparison_df.to_csv(
+                    index=False
+                )
+
                 st.download_button(
                     "⬇️ Download as CSV",
                     data=csv,
@@ -693,9 +756,9 @@ with tab2:
                 )
 
     elif cmp_btn and not cmp_file:
-        st.warning("⚠️ Please upload an image before running the comparison.")
+                st.warning("⚠️ Please upload an image before running the comparison.")
     elif cmp_btn and len(selected_models) < 2:
-        st.warning("⚠️ Please select at least 2 models to compare.")
+                st.warning("⚠️ Please select at least 2 models to compare.")
 
 # ── Footer ──
 st.markdown("""
