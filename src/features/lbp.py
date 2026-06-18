@@ -1,121 +1,102 @@
+from skimage.feature import local_binary_pattern
 import numpy as np
 import cv2
-import os
-import pickle
-from skimage.feature import local_binary_pattern
 
-# ==============================
-# 1. LBP Feature Extraction
-# ==============================
-def extract_lbp_features(image):
-    """
-    Input: image (numpy array)
-    Output: feature vector (1D numpy array)
-    """
-    # Convert to grayscale
-    if len(image.shape) == 3:
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Resize (same size as FFT teammate — keeps things consistent)
-    image = cv2.resize(image, (128, 128))
+def extract_lbp_features(
+    image,
+    img_size=128,
+    patch_grid=2,
+    radii=(1, 2)
+):
 
-    # LBP — every pixel gets replaced by its pattern code
-    lbp_map = local_binary_pattern(image, P=8, R=1, method='uniform')
+    if image is None:
+        return None
 
-    # Histogram — summarize the whole LBP map into fixed-size vector
-    n_bins = 10  # for P=8 uniform LBP, there are exactly 10 possible patterns
-    hist, _ = np.histogram(
-        lbp_map.ravel(),
-        bins=n_bins,
-        range=(0, n_bins),
-        density=True          # normalize so image size doesn't affect the values
+    if image.ndim == 3:
+        image = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY
+        )
+
+    image = cv2.resize(
+        image,
+        (img_size, img_size)
     )
 
-    return hist  # 10 numbers
+    h, w = image.shape
 
+    ph = h // patch_grid
+    pw = w // patch_grid
 
-# ==============================
-# 2. Process Dataset
-# ==============================
-def process_dataset(dataset_path):
     features = []
-    labels = []
 
-    for label in ["real", "fake"]:
-        folder = os.path.join(dataset_path, label)
-        print(f"\nChecking folder: {folder}")
+    # --------------------------
+    # Patch-level LBP
+    # --------------------------
+    for i in range(patch_grid):
 
-        if not os.path.exists(folder):
-            print("Folder not found!")
-            continue
+        for j in range(patch_grid):
 
-        files = os.listdir(folder)
-        print(f"Total files: {len(files)}")
+            patch = image[
+                i * ph:(i + 1) * ph,
+                j * pw:(j + 1) * pw
+            ]
 
-        count = 0
-        for file in files:
+            for radius in radii:
 
-            # Only process image files
-            if not file.lower().endswith((".jpg", ".jpeg", ".png")):
-                continue
+                points = 8 * radius
 
-            img_path = os.path.join(folder, file)
-            img = cv2.imread(img_path)
+                lbp = local_binary_pattern(
+                    patch,
+                    points,
+                    radius,
+                    method="uniform"
+                )
 
-            if img is None:
-                continue
+                hist, _ = np.histogram(
+                    lbp.ravel(),
+                    bins=points + 2,
+                    range=(0, points + 2)
+                )
 
-            # Extract features
-            feat = extract_lbp_features(img)
-            features.append(feat)
-            labels.append(0 if label == "real" else 1)
-            count += 1
+                hist = hist.astype(
+                    np.float32
+                )
 
-            # Progress update
-            if count % 100 == 0:
-                print(f"  Processed {count} images in '{label}'")
+                hist /= (
+                    hist.sum() + 1e-8
+                )
 
-    return np.array(features), np.array(labels)
+                features.extend(hist)
 
-
-# ==============================
-# 3. Save Features
-# ==============================
-def save_features(dataset_path, output_file):
-    print(f"\nProcessing dataset: {dataset_path}")
-    X, y = process_dataset(dataset_path)
-    with open(output_file, "wb") as f:
-        pickle.dump((X, y), f)
-    print(f"Saved {output_file} with shape {X.shape}")
-
-
-# ==============================
-# 4. Main Execution
-# ==============================
-if __name__ == "__main__":
-    print(" Starting LBP feature extraction pipeline...\n")
-
-    base_path = "real-vs-fake"
-
-    # Create output folder
-    os.makedirs("features", exist_ok=True)
-
-    # Train
-    save_features(
-        os.path.join(base_path, "train"),
-        "features/train_lbp_features.pkl"
+    # --------------------------
+    # Global LBP Histogram
+    # --------------------------
+    global_lbp = local_binary_pattern(
+        image,
+        8,
+        1,
+        method="uniform"
     )
 
-    # Validation
-    save_features(
-        os.path.join(base_path, "valid"),
-        "features/valid_lbp_features.pkl"
+    global_hist, _ = np.histogram(
+        global_lbp.ravel(),
+        bins=10,
+        range=(0, 10)
     )
 
-    # Test
-    save_features(
-        os.path.join(base_path, "test"),
-        "features/test_lbp_features.pkl"
+    global_hist = global_hist.astype(
+        np.float32
     )
 
-    print("\n All datasets processed successfully!")
+    global_hist /= (
+        global_hist.sum() + 1e-8
+    )
+
+    features.extend(global_hist)
+
+    return np.asarray(
+        features,
+        dtype=np.float32
+    )

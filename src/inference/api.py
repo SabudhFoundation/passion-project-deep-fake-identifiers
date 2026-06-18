@@ -11,6 +11,7 @@ Available Endpoints:
     POST /predict    - Predict whether an image is real or fake
 """
 
+import traceback
 import os
 import shutil
 import tempfile
@@ -207,9 +208,12 @@ async def predict_image(
         )
 
     except Exception as e:
+
+        traceback.print_exc()
+
         raise HTTPException(
             status_code=500,
-            detail=f"Prediction failed: {str(e)}",
+            detail=f"Prediction failed: {repr(e)}",
         )
 
     finally:

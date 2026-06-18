@@ -18,6 +18,9 @@ import os
 import pickle
 import numpy as np
 import cv2
+import sklearn
+import sys
+import hashlib
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -48,7 +51,7 @@ METHOD_CONFIG = {
     "combined_svm": (
         "svm",
         "models/svm/svm_features.pkl",
-        "models/svm/normalizer_features.pkl",
+        None,
         {"use_lbp": True, "use_glcm": True, "use_fft": True},
     ),
     "glcm_mlp": (
@@ -145,28 +148,81 @@ class DeepfakePredictor:
     # ------------------------------------------------------------------
     # Loaders
     # ------------------------------------------------------------------
-    def _load_svm(self, method: str, model_path: str, normalizer_path, feature_flags):
-        self._require_file(model_path, method)
-        with open(model_path, "rb") as f:
-            data = pickle.load(f)
-        # Support both SVMClassifier.save() format and raw pipeline
-        if isinstance(data, dict) and "model" in data:
+    def _load_svm(
+        self,
+        method: str,
+        model_path: str,
+        normalizer_path,
+        feature_flags,
+    ):
+        self._require_file(
+            model_path,
+            method
+        )
+
+        import joblib
+
+        try:
+            data = joblib.load(
+                model_path
+            )
+        except Exception:
+            with open(
+                model_path,
+                "rb"
+            ) as f:
+                data = pickle.load(f)
+
+        if (
+            isinstance(data, dict)
+            and "model" in data
+        ):
             pipeline = data["model"]
-            threshold = float(data.get("threshold", 0.0))
+
+            threshold = float(
+                data.get(
+                    "threshold",
+                    0.0
+                )
+            )
+
         else:
             pipeline = data
             threshold = 0.0
 
-        normalizer = None
-        if normalizer_path and os.path.exists(normalizer_path):
-            from src.models.normalizer import FeatureNormalizer
-            normalizer = FeatureNormalizer(lbp_dim=10, glcm_dim=4)
-            normalizer.load(normalizer_path)
+        print(
+            f"{method} loaded:",
+            type(pipeline)
+        )
+
+        if hasattr(
+            pipeline,
+            "n_features_in_"
+        ):
+            print(
+                "Expected features:",
+                pipeline.n_features_in_
+            )
+
+        elif hasattr(
+            pipeline,
+            "named_steps"
+        ):
+            if (
+                "scaler"
+                in pipeline.named_steps
+            ):
+                print(
+                    "Expected features:",
+                    pipeline.named_steps[
+                        "scaler"
+                    ].n_features_in_
+                )
 
         return {
             "pipeline": pipeline,
             "threshold": threshold,
-            "normalizer": normalizer,
+            "normalizer": None,
             "feature_flags": feature_flags,
         }
 
@@ -348,10 +404,20 @@ class DeepfakePredictor:
         pipeline = obj["pipeline"]
 
         if hasattr(pipeline, "named_steps"):
+
             print(
-                "PCA expects:",
-                pipeline.named_steps["pca"].n_features_in_
+                "Pipeline steps:",
+                pipeline.named_steps.keys()
             )
+
+            if "scaler" in pipeline.named_steps:
+
+                print(
+                    "Expected features:",
+                    pipeline.named_steps[
+                        "scaler"
+                    ].n_features_in_
+                )
         print("Feature flags:", obj["feature_flags"])
 
         features = features.reshape(1, -1)
