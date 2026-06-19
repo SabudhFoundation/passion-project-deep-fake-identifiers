@@ -78,12 +78,6 @@ METHOD_CONFIG = {
         None,
         {"use_lbp": True, "use_glcm": True, "use_fft": True},
     ),
-    "resnet50": (
-        "cnn_resnet",
-        "models/cnn/resnet50_finetuned.keras",
-        None,
-        None,
-    ),
     "inceptionv3": (
         "cnn_inception",
         "models/cnn/inceptionv3_finetuned.keras",
@@ -94,18 +88,6 @@ METHOD_CONFIG = {
         "efficientnet_512",
         "models/cnn/efficientnet_classifier_512.pth",
         None,
-        None,
-    ),
-    "dual_channel_inception": (
-        "dual",
-        "models/dual_channel/dual_channel_inception.pth",
-        "inception",
-        None,
-    ),
-    "dual_channel_resnet": (
-        "dual",
-        "models/dual_channel/dual_channel_resnet.pth",
-        "resnet",
         None,
     ),
     "dual_cnn": (
@@ -390,6 +372,31 @@ class DeepfakePredictor:
             raise FileNotFoundError(f"Could not read image: {image_path}")
         builder = FeatureBuilder(**feature_flags)
         return builder.extract_features(img)
+    
+    def _extract_mlp_features(
+        self,
+        image_path: str,
+        feature_flags: dict
+    ) -> np.ndarray:
+
+        from src.features_mlp.builder_mlp import (
+            FeatureBuilderMLP
+        )
+
+        img = cv2.imread(image_path)
+
+        if img is None:
+            raise FileNotFoundError(
+                f"Could not read image: {image_path}"
+            )
+
+        builder = FeatureBuilderMLP(
+            **feature_flags
+        )
+
+        return builder.extract_features(
+            img
+        )
 
     # ------------------------------------------------------------------
     # Predictors per family
@@ -449,12 +456,62 @@ class DeepfakePredictor:
             "prediction": pred
         }
     def _predict_mlp(self, image_path: str, obj: dict) -> dict:
-        features = self._extract_classical_features(image_path, obj["feature_flags"])
+        features = self._extract_mlp_features(
+            image_path,
+            obj["feature_flags"]
+        )
         features = obj["scaler"].transform(features.reshape(1, -1))
         proba = obj["model"].predict_proba(features)[0]
         pred = int(np.argmax(proba))
         confidence = float(proba[pred])
         return {"label": LABEL_MAP[pred], "confidence": confidence, "prediction": pred}
+    
+    def _predict_inception(self, image_path: str, obj: dict) -> dict:
+
+        img = cv2.imread(image_path)
+
+        if img is None:
+            raise FileNotFoundError(
+                f"Could not read image: {image_path}"
+            )
+
+        img = cv2.cvtColor(
+            img,
+            cv2.COLOR_BGR2RGB
+        )
+
+        img = cv2.resize(
+            img,
+            (224, 224)
+        ).astype(np.float32)
+
+        img /= 255.0
+
+        img_batch = np.expand_dims(
+            img,
+            0
+        )
+
+        prob_real = float(
+            obj["model"].predict(
+                img_batch,
+                verbose=0
+            )[0][0]
+        )
+
+        pred = 0 if prob_real > 0.5 else 1
+
+        confidence = (
+            prob_real
+            if pred == 0
+            else 1.0 - prob_real
+        )
+
+        return {
+            "label": LABEL_MAP[pred],
+            "confidence": confidence,
+            "prediction": pred,
+        }
 
     def _predict_cnn(self, image_path: str, obj: dict) -> dict:
         img = cv2.imread(image_path)
@@ -674,8 +731,14 @@ class DeepfakePredictor:
         if family == "mlp":
             return self._predict_mlp(image_path, obj)
 
-        if family in ("cnn_resnet", "cnn_inception"):
+        if family in ("cnn_resnet"):
             return self._predict_cnn(image_path, obj)
+        
+        if method == "inceptionv3":
+            return self._predict_inception(
+                image_path,
+                obj
+            )
 
         if family == "efficientnet_512":
             return self._predict_efficientnet_512(image_path, obj)
